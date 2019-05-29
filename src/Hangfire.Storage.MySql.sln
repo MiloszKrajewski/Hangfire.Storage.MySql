@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.2024
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Hangfire.Storage.MySql", "Hangfire.Storage.MySql\Hangfire.Storage.MySql.csproj", "{0BEAED39-972D-465A-B28B-AB0644120C63}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hangfire.Storage.MySql.Test", "Hangfire.Storage.MySql.Test\Hangfire.Storage.MySql.Test.csproj", "{EA2E36B4-FF51-4036-813A-437F13E2B368}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".build", ".build", "{835ECDA0-7229-4D96-8B74-8D9F119E6683}"
+	ProjectSection(SolutionItems) = preProject
+		..\build.fsx = ..\build.fsx
+		..\build.tools.fsx = ..\build.tools.fsx
+		..\CHANGES.md = ..\CHANGES.md
+		..\paket.dependencies = ..\paket.dependencies
+		..\README.md = ..\README.md
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hangfire.Storage.MySql.App", "Hangfire.Storage.MySql.App\Hangfire.Storage.MySql.App.csproj", "{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0BEAED39-972D-465A-B28B-AB0644120C63}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0BEAED39-972D-465A-B28B-AB0644120C63}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0BEAED39-972D-465A-B28B-AB0644120C63}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0BEAED39-972D-465A-B28B-AB0644120C63}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA2E36B4-FF51-4036-813A-437F13E2B368}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA2E36B4-FF51-4036-813A-437F13E2B368}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA2E36B4-FF51-4036-813A-437F13E2B368}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA2E36B4-FF51-4036-813A-437F13E2B368}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4D6DB905-9087-49C1-AFD4-B7AF43F6BE8D}
+	EndGlobalSection
+EndGlobal

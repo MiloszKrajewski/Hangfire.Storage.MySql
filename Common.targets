@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.0.1</Version>
+    <AssemblyVersion>0.0.1</AssemblyVersion>
+    <FileVersion>0.0.1</FileVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Product>Hangfire.Storage.MySql</Product>
+    <Authors>...</Authors>
+    <Copyright>...</Copyright>
+    <Description>...</Description>
+    <RepositoryUrl>https://.../Hangfire.Storage.MySql</RepositoryUrl>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+    <PackageId>Hangfire.Storage.MySql</PackageId>
+    <PackageTags>...</PackageTags>
+    <PackageLicenseUrl>https://.../LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://.../Hangfire.Storage.MySql</PackageProjectUrl>
+    <PackageIconUrl>https://.../Hangfire.Storage.MySql/icon.png</PackageIconUrl>
+    -->
+  </PropertyGroup>
+</Project>
