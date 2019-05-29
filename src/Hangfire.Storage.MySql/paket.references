@@ -1,1 +1,6 @@
-﻿
+﻿Microsoft.CSharp
+System.ValueTuple
+
+Hangfire.Core
+Dapper
+MySqlConnector

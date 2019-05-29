@@ -14,6 +14,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".build", ".build", "{835ECD
 		..\CHANGES.md = ..\CHANGES.md
 		..\paket.dependencies = ..\paket.dependencies
 		..\README.md = ..\README.md
+		..\.gitignore = ..\.gitignore
+		..\settings.cfg = ..\settings.cfg
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hangfire.Storage.MySql.App", "Hangfire.Storage.MySql.App\Hangfire.Storage.MySql.App.csproj", "{8B4FBBA7-E660-46C8-BE90-7EADFB69FE4E}"

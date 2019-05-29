@@ -4,6 +4,7 @@
 .paket/
 .output/
 .idea/
+.orig/
 paket-files/
 packages/
 

@@ -2,6 +2,9 @@ storage none
 framework auto-detect
 source https://www.nuget.org/api/v2
 
+nuget Microsoft.CSharp
+nuget System.ValueTuple
+
 nuget Microsoft.Extensions.DependencyInjection
 nuget Microsoft.Extensions.DependencyInjection.Abstractions
 nuget Microsoft.Extensions.Logging
@@ -10,6 +13,10 @@ nuget Microsoft.Extensions.Logging.Abstractions
 nuget System.Reactive
 nuget System.Interactive
 
+nuget Hangfire.Core
+nuget Dapper
+nuget MySqlConnector
+ 
 nuget Microsoft.NET.Test.Sdk
 nuget xunit
 nuget xunit.runner.visualstudio
