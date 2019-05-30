@@ -3,6 +3,7 @@ using System.Threading;
 using Dapper;
 using Hangfire.Logging;
 using Hangfire.Server;
+using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql
 {
@@ -34,9 +35,13 @@ namespace Hangfire.Storage.MySql
             {
                 _storage.UseConnection(connection =>
                 {
-                    removedCount = connection.Execute(
-                        GetAggregationQuery(),
-                        new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
+                    using (ResourceLock.AcquireOne(
+                        connection, _storageOptions.TablesPrefix, LockableResource.Counter))
+                    {
+                        removedCount = connection.Execute(
+                            GetAggregationQuery(),
+                            new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
+                    }
                 });
 
                 if (removedCount >= NumberOfRecordsInSinglePass)
@@ -56,25 +61,27 @@ namespace Hangfire.Storage.MySql
 
         private string GetAggregationQuery()
         {
+            var prefix = _storageOptions.TablesPrefix;
             return $@"
-SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
-START TRANSACTION;
+                create temporary table __refs__ engine = memory as
+                    select `Id` from `lib1_Counter` limit @count;
 
-INSERT INTO `{_storageOptions.TablesPrefix}AggregatedCounter` (`Key`, Value, ExpireAt)
-    SELECT `Key`, SUM(Value) as Value, MAX(ExpireAt) AS ExpireAt 
-    FROM (
-            SELECT `Key`, Value, ExpireAt
-            FROM `{_storageOptions.TablesPrefix}Counter`
-            LIMIT @count) tmp
-	GROUP BY `Key`
-        ON DUPLICATE KEY UPDATE 
-            Value = Value + VALUES(Value),
-            ExpireAt = GREATEST(ExpireAt,VALUES(ExpireAt));
+                insert into `{prefix}AggregatedCounter` (`Key`, Value, ExpireAt)
+                    select `Key`, SumValue, MaxExpireAt
+                    from (
+                        select `Key`, sum(Value) as SumValue, max(ExpireAt) AS MaxExpireAt
+                        from __refs__ r join `{prefix}Counter` c on (c.Id = r.`Id`)
+                        group by `Key`
+                    ) _
+                    on duplicate key update
+                        Value = Value + values(Value),
+                        ExpireAt = greatest(ExpireAt, values(ExpireAt));
 
-DELETE FROM `{_storageOptions.TablesPrefix}Counter`
-LIMIT @count;
+                delete from `{prefix}Counter`
+                    where Id in (select Id from __refs__);
 
-COMMIT;";
+                drop table __refs__;
+            ";
         }
     }
 }

@@ -46,7 +46,6 @@ namespace Hangfire.Storage.MySql
         }
 
         public bool PrepareSchemaIfNecessary { get; set; }
-
         public TimeSpan JobExpirationCheckInterval { get; set; }
         public TimeSpan CountersAggregateInterval { get; set; }
 

@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Dapper;
 using Hangfire.Common;
 using Hangfire.Logging;
 using Hangfire.States;
+using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
@@ -18,6 +20,9 @@ namespace Hangfire.Storage.MySql
 
         private readonly Queue<Action<MySqlConnection>> _commandQueue
             = new Queue<Action<MySqlConnection>>();
+
+        private readonly List<LockableResource> _resources 
+            = new List<LockableResource>();
 
         public MySqlWriteOnlyTransaction(MySqlStorage storage, MySqlStorageOptions storageOptions)
         {
@@ -158,8 +163,8 @@ namespace Hangfire.Storage.MySql
             AcquireSetLock();
             QueueCommand(x => x.Execute(
                 $"INSERT INTO `{_storageOptions.TablesPrefix}Set` (`Key`, `Value`, `Score`) " +
-                "VALUES (@Key, @Value, @Score) " +
-                "ON DUPLICATE KEY UPDATE `Score` = @Score",
+                "VALUES (@key, @value, @score) " +
+                "ON DUPLICATE KEY UPDATE `Score` = @score",
                 new { key, value, score }));
         }
 
@@ -244,11 +249,11 @@ namespace Hangfire.Storage.MySql
                 $@"
 delete lst
 from `{_storageOptions.TablesPrefix}List` lst
-	inner join (SELECT tmp.Id, @rownum := @rownum + 1 AS rank
+	inner join (SELECT tmp.Id, @rownum := @rownum + 1 AS `rank`
 		  		FROM `{_storageOptions.TablesPrefix}List` tmp, 
        				(SELECT @rownum := 0) r ) ranked on ranked.Id = lst.Id
 where lst.Key = @key
-    and ranked.rank not between @start and @end",
+    and ranked.`rank` not between @start and @end",
                 new { key = key, start = keepStartingFrom + 1, end = keepEndingAt + 1 }));
         }
 
@@ -344,9 +349,15 @@ where lst.Key = @key
         {
             _storage.UseTransaction(connection =>
             {
-                foreach (Action<MySqlConnection> command in _commandQueue)
+                using (ResourceLock.AcquireMany(
+                    connection, _storageOptions.TablesPrefix,
+                    TimeSpan.FromSeconds(30), CancellationToken.None,
+                    _resources.ToArray()))
                 {
-                    command(connection);
+                    foreach (var command in _commandQueue)
+                    {
+                        command(connection);
+                    }
                 }
             });
         }
@@ -356,37 +367,39 @@ where lst.Key = @key
             _commandQueue.Enqueue(action);
         }
         
+        private void AcquireLock(LockableResource resource)
+        {
+            _resources.Add(resource);
+        }
+        
         private void AcquireJobLock()
         {
-            AcquireLock(String.Format("Job"));
+            AcquireLock(LockableResource.Job);
         }
 
         private void AcquireSetLock()
         {
-            AcquireLock(String.Format("Set"));
+            AcquireLock(LockableResource.Set);
         }
         
         private void AcquireListLock()
         {
-            AcquireLock(String.Format("List"));
+            AcquireLock(LockableResource.List);
         }
 
         private void AcquireHashLock()
         {
-            AcquireLock(String.Format("Hash"));
+            AcquireLock(LockableResource.Hash);
         }
         
         private void AcquireStateLock()
         {
-            AcquireLock(String.Format("State"));
+            AcquireLock(LockableResource.State);
         }
 
         private void AcquireCounterLock()
         {
-            AcquireLock(String.Format("Counter"));
-        }
-        private void AcquireLock(string resource)
-        {
-        }
+            AcquireLock(LockableResource.Counter);
+       }
     }
 }

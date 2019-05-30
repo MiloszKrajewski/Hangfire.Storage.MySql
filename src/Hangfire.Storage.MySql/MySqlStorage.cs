@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using System.Text;
 using System.Transactions;
+using Dapper;
 using Hangfire.Annotations;
 using Hangfire.Logging;
 using Hangfire.Server;
@@ -19,7 +20,6 @@ namespace Hangfire.Storage.MySql
         private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlStorage));
 
         private readonly string _connectionString;
-        private readonly MySqlConnection _existingConnection;
         private readonly MySqlStorageOptions _storageOptions;
 
         public virtual PersistentJobQueueProviderCollection QueueProviders { get; private set; }
@@ -31,7 +31,7 @@ namespace Hangfire.Storage.MySql
 
             if (IsConnectionString(connectionString))
             {
-                _connectionString = connectionString;
+                _connectionString = ApplyAllowUserVariablesProperty(connectionString);
             }
             else
             {
@@ -47,23 +47,14 @@ namespace Hangfire.Storage.MySql
                 using (var connection = CreateAndOpenConnection())
                 {
                     MySqlObjectsInstaller.Install(connection, storageOptions.TablesPrefix);
+                    MySqlObjectsInstaller.Upgrade(connection, storageOptions.TablesPrefix);
                 }
             }
-
+            
             InitializeQueueProviders();
         }
 
-        public MySqlStorage(MySqlConnection existingConnection, MySqlStorageOptions storageOptions)
-        {
-            if (existingConnection == null) throw new ArgumentNullException("existingConnection");
-
-            _existingConnection = existingConnection;
-            _storageOptions = storageOptions;
-
-            InitializeQueueProviders();
-        }
-
-        private string ApplyAllowUserVariablesProperty(string connectionString)
+        private static string ApplyAllowUserVariablesProperty(string connectionString)
         {
             if (connectionString.ToLower().Contains("allow user variables"))
             {
@@ -146,7 +137,7 @@ namespace Hangfire.Storage.MySql
             return new MySqlStorageConnection(this, _storageOptions);
         }
 
-        private bool IsConnectionString(string nameOrConnectionString)
+        private static bool IsConnectionString(string nameOrConnectionString)
         {
             return nameOrConnectionString.Contains(";");
         }
@@ -214,20 +205,15 @@ namespace Hangfire.Storage.MySql
 
         internal MySqlConnection CreateAndOpenConnection()
         {
-            if (_existingConnection != null)
-            {
-                return _existingConnection;
-            }
-
             var connection = new MySqlConnection(_connectionString);
             connection.Open();
-
+            connection.Execute("do release_all_locks()");
             return connection;
         }
 
         internal void ReleaseConnection(IDbConnection connection)
         {
-            if (connection != null && !ReferenceEquals(connection, _existingConnection))
+            if (connection != null)
             {
                 connection.Dispose();
             }

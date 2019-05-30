@@ -5,3 +5,7 @@ Microsoft.Extensions.DependencyInjection
 Microsoft.Extensions.DependencyInjection.Abstractions
 Microsoft.Extensions.Logging
 Microsoft.Extensions.Logging.Abstractions
+
+Hangfire
+# Hangfire.MySqlStorage
+# Hangfire.MySql.Core

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<migrations>
+  <migration id="index-pack-1"><![CDATA[
+    create index `IX_AggregatedCounter_ExpireAt` on `[tablesPrefix]AggregatedCounter` (`ExpireAt`);
+    create index `IX_Job_ExpireAt` on `[tablesPrefix]Job` (`ExpireAt`);
+    create index `IX_Set_ExpireAt` on `[tablesPrefix]Set` (`ExpireAt`);
+    create index `IX_List_ExpireAt` on `[tablesPrefix]List` (`ExpireAt`);
+    create index `IX_Hash_ExpireAt` on `[tablesPrefix]Hash` (`ExpireAt`);
+    create index `IX_Set_KeyScore` on `[tablesPrefix]Set` (`Key`, `Score`, `Value`);
+    create index `IX_JobQueue_FetchToken` on `[tablesPrefix]JobQueue` (`FetchToken`);
+    create index `IX_DistributedLock_Resource` on `[tablesPrefix]DistributedLock` (`Resource`, `CreatedAt`);
+  ]]></migration>
+</migrations>

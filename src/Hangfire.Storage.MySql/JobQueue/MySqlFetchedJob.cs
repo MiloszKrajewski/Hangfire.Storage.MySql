@@ -3,6 +3,7 @@ using System.Data;
 using System.Globalization;
 using Dapper;
 using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql.JobQueue
 {
@@ -55,14 +56,13 @@ namespace Hangfire.Storage.MySql.JobQueue
         {
             Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
 
-            //todo: unit test
-            _connection.Execute(
-                $"delete from `{_storageOptions.TablesPrefix}JobQueue` " +
-                "where Id = @id",
-                new
-                {
-                    id = _id
-                });
+            using (ResourceLock.AcquireOne(
+                _connection, _storageOptions.TablesPrefix, LockableResource.Queue))
+            {
+                _connection.Execute(
+                    $"delete from `{_storageOptions.TablesPrefix}JobQueue` where Id = @id",
+                    new { id = _id });
+            }
 
             _removedFromQueue = true;
         }
@@ -71,14 +71,14 @@ namespace Hangfire.Storage.MySql.JobQueue
         {
             Logger.TraceFormat("Requeue JobId={0}", JobId);
 
-            //todo: unit test
-            _connection.Execute(
-                $"update `{_storageOptions.TablesPrefix}JobQueue` set FetchedAt = null " +
-                "where Id = @id",
-                new
-                {
-                    id = _id
-                });
+            using (ResourceLock.AcquireOne(
+                _connection, _storageOptions.TablesPrefix, LockableResource.Queue))
+            {
+                _connection.Execute(
+                    $"update `{_storageOptions.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
+                    new { id = _id });
+            }
+
             _requeued = true;
         }
 

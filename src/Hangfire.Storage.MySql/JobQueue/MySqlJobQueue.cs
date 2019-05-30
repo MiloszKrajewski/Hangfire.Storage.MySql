@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Dapper;
 using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql.JobQueue
@@ -38,7 +39,8 @@ namespace Hangfire.Storage.MySql.JobQueue
                 
                 try
                 {
-                    using (new MySqlDistributedLock(_storage, "JobQueue", TimeSpan.FromSeconds(30), _options))
+                    using (ResourceLock.AcquireOne(
+                        connection, _options.TablesPrefix, LockableResource.Queue))
                     {
                         string token = Guid.NewGuid().ToString();
 
@@ -92,7 +94,13 @@ namespace Hangfire.Storage.MySql.JobQueue
         public void Enqueue(IDbConnection connection, string queue, string jobId)
         {
             Logger.TraceFormat("Enqueue JobId={0} Queue={1}", jobId, queue);
-            connection.Execute($"insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue) values (@jobId, @queue)", new {jobId, queue});
+            using (ResourceLock.AcquireOne(
+                connection, _options.TablesPrefix, LockableResource.Queue))
+            {
+                connection.Execute(
+                    $"insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue) values (@jobId, @queue)",
+                    new { jobId, queue });
+            }
         }
     }
 }
