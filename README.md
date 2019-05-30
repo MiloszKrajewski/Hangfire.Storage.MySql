@@ -14,13 +14,13 @@ It is relatively complicated.
 As far as I understand `Hangfire.MySqlStorage` was first (and is listed on Hangfire website as 3rd party driver). It
 was not released for .NET Core (.NET Standard) for a very long time though so unofficial fork has been created, 
 `Hangfire.MySql.Core`, which main purpose was: .NET Core. It also included few fixes but nothing revolutionary.
-After a while original `Hangfire.MySqlStorage` caught up with .NET Core and some fixed (nothing revolutionary either). 
+After a while original `Hangfire.MySqlStorage` caught up with .NET Core and some fixes (nothing revolutionary either). 
 
 Unfortunately, there are still more serious bugs which reveal themselves under load.
 
 If you see exceptions saying `Too many connections`, `Deadlock found when trying to get lock; try restarting transaction`,
 `Transaction branch was rolled back: deadlock was detected`, or something like `Timeout expired` you are probably having 
-concurrency problems with dead-locking.
+concurrency problems related to deadlocks.
 
 You can find some signs that authors tried to address those issues, like some 
 `SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED` here and there but this is not solving problems in high-load
@@ -31,7 +31,7 @@ situations.
 There are actually 3 scenarios I personally encountered:
 * Single statement dead-lock with exception (MySQL error #1213)
 * Transaction dead-lock with exception (MySQL error #1614)
-* Transaction (only?) dead-lock freezing whole operation   
+* Transaction (only?) (true) dead-lock freezing whole operation   
 
 As first two are relatively benign (we could just catch exception and retry) the third one is deadly.
 This is just a speculation, but it seems like it locks tables permanently, so even killing application is not removing 
@@ -57,9 +57,12 @@ you have slightly different database than original, for better and for worse.**
 
 `MySqlWriteOnlyTransaction` seems to have an idea of locking resources modified by transactions 
 (methods like: `AcquireJobLock`) but actual implementation is empty, so when transaction starts
-nothing is locked, so MySQL locks whatever MySQL wants lock, in random order leading to dealocks.
+nothing is locked, so MySQL locks whatever MySQL wants to lock, in random order leading to complete standstill 
+and leaking connections.
+
 I hoped for catching MySQL error #1614 and retrying transaction but excepion was not always thrown,
 sometimes it was just freezing.
+
 So preemptive locking was the safest but.
 
 The problem with preemptive locking is, that if you decide to use them, you have to use them everywhere.
