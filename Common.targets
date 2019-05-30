@@ -1,23 +1,21 @@
 <Project>
   <PropertyGroup>
-    <Version>2.0.1-beta</Version>
-    <AssemblyVersion>2.0.1</AssemblyVersion>
-    <FileVersion>2.0.1</FileVersion>
+    <Version>2.0.2-beta</Version>
+    <AssemblyVersion>2.0.2</AssemblyVersion>
+    <FileVersion>2.0.2</FileVersion>
   </PropertyGroup>
   <PropertyGroup>
     <Product>Hangfire.Storage.MySql</Product>
-    <Authors>...</Authors>
-    <Copyright>...</Copyright>
-    <Description>...</Description>
-    <RepositoryUrl>https://.../Hangfire.Storage.MySql</RepositoryUrl>
+    <Authors>Milosz Krajewski</Authors>
+    <Copyright>Milosz Krajewski</Copyright>
+    <Description>MySQL storage adapter for Hangfire (https://www.hangfire.io)</Description>
+    <RepositoryUrl>https://github.com/MiloszKrajewski/Hangfire.Storage.MySql</RepositoryUrl>
   </PropertyGroup>
   <PropertyGroup>
-    <!--
-    <PackageId>Hangfire.Storage.MySql</PackageId>
-    <PackageTags>...</PackageTags>
-    <PackageLicenseUrl>https://.../LICENSE</PackageLicenseUrl>
-    <PackageProjectUrl>https://.../Hangfire.Storage.MySql</PackageProjectUrl>
-    <PackageIconUrl>https://.../Hangfire.Storage.MySql/icon.png</PackageIconUrl>
-    -->
+    <!--<PackageId>Hangfire.Storage.MySql</PackageId>-->
+    <PackageTags>mysql hangfire</PackageTags>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/MiloszKrajewski/Hangfire.Storage.MySql/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/MiloszKrajewski/Hangfire.Storage.MySql</PackageProjectUrl>
+    <!--<PackageIconUrl>https://.../Hangfire.Storage.MySql/icon.png</PackageIconUrl>-->
   </PropertyGroup>
 </Project>
