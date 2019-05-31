@@ -1,68 +1,66 @@
 ﻿using System;
 using System.Threading;
+
 using Dapper;
+
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Locking;
 
+using MySql.Data.MySqlClient;
+
 namespace Hangfire.Storage.MySql
 {
-    internal class CountersAggregator : IServerComponent
-    {
-        private static readonly ILog Logger = LogProvider.GetLogger(typeof(CountersAggregator));
+	internal class CountersAggregator: IServerComponent
+	{
+		private static readonly ILog Logger = LogProvider.GetLogger(typeof(CountersAggregator));
 
-        private const int NumberOfRecordsInSinglePass = 1000;
-        private static readonly TimeSpan DelayBetweenPasses = TimeSpan.FromMilliseconds(500);
+		private const int NumberOfRecordsInSinglePass = 1000;
+		private static readonly TimeSpan DelayBetweenPasses = TimeSpan.FromMilliseconds(500);
 
-        private readonly MySqlStorage _storage;
-        private readonly MySqlStorageOptions _storageOptions;
+		private readonly MySqlStorage _storage;
+		private readonly MySqlStorageOptions _options;
 
-        public CountersAggregator(MySqlStorage storage, MySqlStorageOptions storageOptions)
-        {
-            if (storage == null) throw new ArgumentNullException("storage");
+		public CountersAggregator(MySqlStorage storage, MySqlStorageOptions options)
+		{
+			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
+			_options = options ?? throw new ArgumentNullException(nameof(options));
+		}
 
-            _storage = storage;
-            _storageOptions = storageOptions;
-        }
+		public void Execute(CancellationToken cancellationToken)
+		{
+			Logger.DebugFormat(
+				$"Aggregating records in '{_options.TablesPrefix}Counter' table...");
 
-        public void Execute(CancellationToken cancellationToken)
-        {
-            Logger.DebugFormat($"Aggregating records in '{_storageOptions.TablesPrefix}Counter' table...");
+			while (true)
+			{
+				var removedCount = _storage.UseConnection(AggregateCounter);
 
-            int removedCount = 0;
+				if (removedCount < NumberOfRecordsInSinglePass)
+					break;
 
-            do
-            {
-                _storage.UseConnection(connection =>
-                {
-                    using (ResourceLock.AcquireOne(
-                        connection, _storageOptions.TablesPrefix, LockableResource.Counter))
-                    {
-                        removedCount = connection.Execute(
-                            GetAggregationQuery(),
-                            new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
-                    }
-                });
+				cancellationToken.WaitHandle.WaitOne(DelayBetweenPasses);
+				cancellationToken.ThrowIfCancellationRequested();
+			}
 
-                if (removedCount >= NumberOfRecordsInSinglePass)
-                {
-                    cancellationToken.WaitHandle.WaitOne(DelayBetweenPasses);
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-            } while (removedCount >= NumberOfRecordsInSinglePass);
+			cancellationToken.WaitHandle.WaitOne(_options.CountersAggregateInterval);
+		}
 
-            cancellationToken.WaitHandle.WaitOne(_storageOptions.CountersAggregateInterval);
-        }
+		private int AggregateCounter(MySqlConnection connection)
+		{
+			using (ResourceLock.AcquireOne(
+				connection, _options.TablesPrefix, LockableResource.Counter))
+			{
+				return connection.Execute(
+					GetAggregationQuery(),
+					new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
+			}
+		}
 
-        public override string ToString()
-        {
-            return GetType().ToString();
-        }
-
-        private string GetAggregationQuery()
-        {
-            var prefix = _storageOptions.TablesPrefix;
-            return $@"
+		private string GetAggregationQuery()
+		{
+			var prefix = _options.TablesPrefix;
+			return $@"
                 create temporary table __refs__ engine = memory as
                     select `Id` from `lib1_Counter` limit @count;
 
@@ -82,5 +80,7 @@ namespace Hangfire.Storage.MySql
                 drop table __refs__;
             ";
 		}
+		
+		public override string ToString() => GetType().ToString();
 	}
 }

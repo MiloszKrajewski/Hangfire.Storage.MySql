@@ -48,7 +48,7 @@ namespace Hangfire.Storage.MySql.App
 			{
 				var cancel = new CancellationTokenSource();
 				var task = Task.WhenAll(
-					// Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
+					Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.Run(() => Consumer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.CompletedTask
 				);
@@ -94,7 +94,7 @@ namespace Hangfire.Storage.MySql.App
 			ILoggerFactory loggerFactory, JobStorage storage, CancellationToken token)
 		{
 			var server = new BackgroundJobServer(
-				new BackgroundJobServerOptions { WorkerCount = 1 },
+				new BackgroundJobServerOptions { WorkerCount = 16 },
 				storage);
 
 			return Task.Run(

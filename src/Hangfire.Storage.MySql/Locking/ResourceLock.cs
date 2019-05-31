@@ -104,7 +104,7 @@ namespace Hangfire.Storage.MySql.Locking
 			params string[] resourceNames)
 		{
 			var handles = new DisposableBag();
-
+			
 			try
 			{
 				var expiration = Now.Add(timeout); // stop trying @

@@ -17,8 +17,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 
         public MySqlJobQueueMonitoringApi(MySqlStorage storage, MySqlStorageOptions storageOptions)
         {
-            if (storage == null) throw new ArgumentNullException("storage");
-            _storage = storage;
+            _storage = storage ?? throw new ArgumentNullException(nameof(storage));
             _storageOptions = storageOptions;
         }
 
@@ -28,10 +27,11 @@ namespace Hangfire.Storage.MySql.JobQueue
             {
                 if (_queuesCache.Count == 0 || _cacheUpdated.Add(QueuesCacheTimeout) < DateTime.UtcNow)
                 {
-                    var result = _storage.UseConnection(connection =>
-                    {
-                        return connection.Query($"select distinct(Queue) from `{_storageOptions.TablesPrefix}JobQueue`").Select(x => (string)x.Queue).ToList();
-                    });
+                    var result = _storage.UseConnection(connection => 
+                        connection
+                            .Query($"select distinct(Queue) from `{_storageOptions.TablesPrefix}JobQueue`")
+                            .Select(x => (string)x.Queue)
+                            .ToList());
 
                     _queuesCache = result;
                     _cacheUpdated = DateTime.UtcNow;
