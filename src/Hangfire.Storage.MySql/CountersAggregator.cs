@@ -70,18 +70,17 @@ namespace Hangfire.Storage.MySql
                     select `Key`, SumValue, MaxExpireAt
                     from (
                         select `Key`, sum(Value) as SumValue, max(ExpireAt) AS MaxExpireAt
-                        from __refs__ r join `{prefix}Counter` c on (c.Id = r.`Id`)
+                        from `{prefix}Counter` c join __refs__ r on (r.Id = c.Id)
                         group by `Key`
                     ) _
                     on duplicate key update
                         Value = Value + values(Value),
                         ExpireAt = greatest(ExpireAt, values(ExpireAt));
 
-                delete from `{prefix}Counter`
-                    where Id in (select Id from __refs__);
+                delete c from `{prefix}Counter` c join __refs__ r on (r.Id = c.Id);
 
                 drop table __refs__;
             ";
-        }
-    }
+		}
+	}
 }

@@ -10,4 +10,7 @@
     create index `IX_JobQueue_FetchToken` on `[tablesPrefix]JobQueue` (`FetchToken`);
     create index `IX_DistributedLock_Resource` on `[tablesPrefix]DistributedLock` (`Resource`, `CreatedAt`);
   ]]></migration>
+  <migration id="set.score-to-double"><![CDATA[
+    alter table `[tablesPrefix]Set` modify Score double not null;
+  ]]></migration>
 </migrations>

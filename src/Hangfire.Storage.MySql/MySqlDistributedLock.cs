@@ -25,7 +25,7 @@ namespace Hangfire.Storage.MySql
 		public MySqlDistributedLock(
 			IDbConnection connection, string resource, TimeSpan timeout,
 			MySqlStorageOptions storageOptions): 
-			this(connection, resource, timeout, storageOptions, new CancellationToken()) { }
+			this(connection, resource, timeout, storageOptions, CancellationToken.None) { }
 
 		public MySqlDistributedLock(
 			IDbConnection connection, string resource, TimeSpan timeout,

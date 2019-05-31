@@ -5,17 +5,21 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Xml.Linq;
 using Dapper;
 using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
+
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
 {
     internal static class MySqlObjectsInstaller
     {
+        private static readonly TimeSpan MigrationTimeout = TimeSpan.FromMinutes(1);
         private static readonly ILog Log = LogProvider.GetLogger(typeof(MySqlStorage));
-        
+
         public static void Install(MySqlConnection connection, string tablesPrefix = null)
         {
             if (connection == null) throw new ArgumentNullException("connection");
@@ -41,26 +45,32 @@ namespace Hangfire.Storage.MySql
 
         public static void Upgrade(MySqlConnection connection, string tablesPrefix = null)
         {
-            if (connection == null) throw new ArgumentNullException("connection");
+            if (connection == null) throw new ArgumentNullException(nameof(connection));
 
             var prefix = tablesPrefix ?? string.Empty;
 
-            var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Migrations.xml";
-            var document = XElement.Parse(GetStringResource(resourceName));
-
-            EnsureMigrationsTable(connection, prefix);
-
-            var migrations = document
-                .Elements("migration")
-                .Select(e => new { id = e.Attribute("id")?.Value, script = e.Value })
-                .ToArray();
-
-            foreach (var migration in migrations)
+            using (ResourceLock.AcquireOne(
+                connection, prefix, 
+                MigrationTimeout, CancellationToken.None, 
+                LockableResource.Migration))
             {
-                var alreadyApplied = IsMigrationApplied(connection, prefix, migration.id);
-                if (alreadyApplied) continue;
+                var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Migrations.xml";
+                var document = XElement.Parse(GetStringResource(resourceName));
 
-                ApplyMigration(connection, migration.script, prefix, migration.id);
+                EnsureMigrationsTable(connection, prefix);
+
+                var migrations = document
+                    .Elements("migration")
+                    .Select(e => new { id = e.Attribute("id")?.Value, script = e.Value })
+                    .ToArray();
+
+                foreach (var migration in migrations)
+                {
+                    var alreadyApplied = IsMigrationApplied(connection, prefix, migration.id);
+                    if (alreadyApplied) continue;
+
+                    ApplyMigration(connection, migration.script, prefix, migration.id);
+                }
             }
         }
 
@@ -88,6 +98,8 @@ namespace Hangfire.Storage.MySql
         private static void ApplyMigration(
             DbConnection connection, string script, string prefix, string id)
         {
+            // NOTE: Some operations cannot be executed in transactions (create table?)
+            // we will need some mechanism to handle that if we need it
             using (var transaction = connection.BeginTransaction())
             {
                 connection.Execute(

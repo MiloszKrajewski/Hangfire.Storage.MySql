@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -40,12 +41,14 @@ namespace Hangfire.Storage.MySql.App
 			var connectionString = "Server=localhost;Database=hangfire;Uid=scim;Pwd=sc1m;";
 			var tablePrefix = "lib1_";
 
+			GlobalConfiguration.Configuration.UseLogProvider(new HLogProvider(loggerFactory));
+
 			using (var storage = new MySqlStorage(
 				connectionString, new MySqlStorageOptions { TablesPrefix = tablePrefix }))
 			{
 				var cancel = new CancellationTokenSource();
 				var task = Task.WhenAll(
-					Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
+					// Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.Run(() => Consumer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.CompletedTask
 				);
@@ -90,10 +93,9 @@ namespace Hangfire.Storage.MySql.App
 		private static Task Consumer(
 			ILoggerFactory loggerFactory, JobStorage storage, CancellationToken token)
 		{
-			GlobalConfiguration.Configuration.UseLogProvider(
-				new HLogProvider(loggerFactory));
-			
-			var server = new BackgroundJobServer(storage);
+			var server = new BackgroundJobServer(
+				new BackgroundJobServerOptions { WorkerCount = 1 },
+				storage);
 
 			return Task.Run(
 				() => {
@@ -103,9 +105,6 @@ namespace Hangfire.Storage.MySql.App
 				}, token);
 		}
 
-		public static void HandleJob(int i)
-		{
-			Ticks.OnNext(Unit.Default);
-		}
+		public static void HandleJob(int i) { Ticks.OnNext(Unit.Default); }
 	}
 }

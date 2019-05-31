@@ -1,3 +1,7 @@
+## 2.0.3-beta (2019/05/31)
+* added exclusive lock to run migrations
+* change type for Set.Score from float to double
+
 ## 2.0.2-beta (2019/05/30)
 * added preemptive locking to avoid deadlocks (ResourceLock)
 * added migrations (forward only) to add missing indexes (see: Migrations.xml)

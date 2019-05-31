@@ -12,6 +12,7 @@ namespace Hangfire.Storage.MySql.Locking
 		Hash = 0x0010,
 		Queue = 0x0020,
 		Lock = 0x0040, 
-		State = 0x0080,
+		State = 0x0080, 
+		Migration = 0x0100,
 	}
 }
