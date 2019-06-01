@@ -1,3 +1,6 @@
+## 2.0.5-beta (2019/06/01)
+* minor changes to job queue (less connections)
+
 ## 2.0.4-beta (2019/06/01)
 * replaced TransactionScope with "normal" transactions
 

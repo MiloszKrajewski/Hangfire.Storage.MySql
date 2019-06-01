@@ -7,83 +7,82 @@ using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql.JobQueue
 {
-    internal class MySqlFetchedJob : IFetchedJob
-    {
-        private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlFetchedJob));
+	internal class MySqlFetchedJob: IFetchedJob
+	{
+		private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlFetchedJob));
 
-        private readonly MySqlStorage _storage;
-        private readonly IDbConnection _connection;
-        private readonly MySqlStorageOptions _storageOptions;
-        private readonly int _id;
-        private bool _removedFromQueue;
-        private bool _requeued;
-        private bool _disposed;
+		private readonly MySqlStorage _storage;
+		private readonly IDbConnection _connection;
+		private readonly MySqlStorageOptions _options;
+		private readonly int _id;
+		private bool _removed;
+		private bool _requeued;
+		private bool _disposed;
 
-        public MySqlFetchedJob(
-            MySqlStorage storage, 
-            IDbConnection connection,
-            FetchedJob fetchedJob,
-            MySqlStorageOptions storageOptions)
-        {
-            if (storage == null) throw new ArgumentNullException("storage");
-            if (connection == null) throw new ArgumentNullException("connection");
-            if (fetchedJob == null) throw new ArgumentNullException("fetchedJob");
+		public MySqlFetchedJob(
+			MySqlStorage storage,
+			MySqlStorageOptions options,
+			IDbConnection connection,
+			FetchedJob fetchedJob)
+		{
+			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
+			_connection = connection ?? throw new ArgumentNullException(nameof(connection));
+			_options = options ?? throw new ArgumentNullException(nameof(options));
 
-            _storage = storage;
-            _connection = connection;
-            _storageOptions = storageOptions;
-            _id = fetchedJob.Id;
-            JobId = fetchedJob.JobId.ToString(CultureInfo.InvariantCulture);
-            Queue = fetchedJob.Queue; 
-        }
+			if (fetchedJob == null)
+				throw new ArgumentNullException(nameof(fetchedJob));
 
-        public void Dispose()
-        {
+			_id = fetchedJob.Id;
+			JobId = fetchedJob.JobId.ToString(CultureInfo.InvariantCulture);
+			Queue = fetchedJob.Queue;
+		}
 
-            if (_disposed) return;
+		public void Dispose()
+		{
+			if (_disposed) return;
 
-            if (!_removedFromQueue && !_requeued)
-            {
-                Requeue();
-            }
+			if (!_removed && !_requeued)
+			{
+				Requeue();
+			}
 
-            _storage.ReleaseConnection(_connection);
+			_storage.ReleaseConnection(_connection);
 
-            _disposed = true;
-        }
+			_disposed = true;
+		}
 
-        public void RemoveFromQueue()
-        {
-            Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
+		public void RemoveFromQueue()
+		{
+			Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
 
-            using (ResourceLock.AcquireOne(
-                _connection, _storageOptions.TablesPrefix, LockableResource.Queue))
-            {
-                _connection.Execute(
-                    $"delete from `{_storageOptions.TablesPrefix}JobQueue` where Id = @id",
-                    new { id = _id });
-            }
+			using (ResourceLock.AcquireOne(
+				_connection, _options.TablesPrefix, LockableResource.Queue))
+			{
+				_connection.Execute(
+					$"delete from `{_options.TablesPrefix}JobQueue` where Id = @id",
+					new { id = _id });
+			}
 
-            _removedFromQueue = true;
-        }
+			_removed = true;
+		}
 
-        public void Requeue()
-        {
-            Logger.TraceFormat("Requeue JobId={0}", JobId);
+		public void Requeue()
+		{
+			Logger.TraceFormat("Requeue JobId={0}", JobId);
 
-            using (ResourceLock.AcquireOne(
-                _connection, _storageOptions.TablesPrefix, LockableResource.Queue))
-            {
-                _connection.Execute(
-                    $"update `{_storageOptions.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
-                    new { id = _id });
-            }
+			using (ResourceLock.AcquireOne(
+				_connection, _options.TablesPrefix, LockableResource.Queue))
+			{
+				_connection.Execute(
+					$"update `{_options.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
+					new { id = _id });
+			}
 
-            _requeued = true;
-        }
+			_requeued = true;
+		}
 
-        public string JobId { get; private set; }
+		public string JobId { get; }
 
-        public string Queue { get; private set; }
-    }
+		public string Queue { get; }
+	}
 }

@@ -48,7 +48,7 @@ namespace Hangfire.Storage.MySql.App
 			{
 				var cancel = new CancellationTokenSource();
 				var task = Task.WhenAll(
-					Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
+					// Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.Run(() => Consumer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.CompletedTask
 				);
