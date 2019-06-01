@@ -68,12 +68,20 @@ So preemptive locking was the safest but.
 The problem with preemptive locking is, that if you decide to use them, you have to use them everywhere.
 So, all `inserts`, `updates`, and `deletes` are now using preemptive locks on appropriate resources.
 
+## Deadlocks caused by distributed transactions
+
+Implementation of `TransactionScope` for `MySqlConnector` uses MySQL distributed transactions (`XA`). It is a 
+[slightly problematic](https://github.com/mysql-net/MySqlConnector/issues/254) as such transaction survive crashes,
+shutdowns, etc. As Hangfire never reconnects to transaction, those hanging transaction pile up and lock tables.
+It took me few days to find what is the problem. 
+See `XaRecover` console app in this repository which can be used to lift all distributed transactions.
+
 # Usage
 
 As in original `Hangfire.MySqlStorage`:
 
 ```c#
-var options = 
+var options =
     new MySqlStorageOptions {
         TransactionIsolationLevel = IsolationLevel.ReadCommitted,
         QueuePollInterval = TimeSpan.FromSeconds(15),

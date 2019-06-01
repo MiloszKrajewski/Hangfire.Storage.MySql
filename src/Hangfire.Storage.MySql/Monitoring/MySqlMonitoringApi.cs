@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Dapper;
+using System.Linq;
 using Hangfire.Annotations;
 using Hangfire.Common;
 using Hangfire.States;
@@ -9,7 +9,6 @@ using Hangfire.Storage.Monitoring;
 using Hangfire.Storage.MySql.Entities;
 using Hangfire.Storage.MySql.JobQueue;
 using MySql.Data.MySqlClient;
-using IsolationLevel = System.Transactions.IsolationLevel; 
 
 namespace Hangfire.Storage.MySql.Monitoring
 {
@@ -37,13 +36,12 @@ namespace Hangfire.Storage.MySql.Monitoring
 
             foreach (var tuple in tuples)
             {
-                var enqueuedJobIds = tuple.Monitoring.GetEnqueuedJobIds(tuple.Queue, 0, 5);
+                var enqueuedJobIds =
+                    tuple.Monitoring.GetEnqueuedJobIds(tuple.Queue, 0, 5).ToArray();
                 var counters = tuple.Monitoring.GetEnqueuedAndFetchedCount(tuple.Queue);
+                var firstJobs = UseConnection(c => EnqueuedJobs(c, enqueuedJobIds));
 
-                var firstJobs = UseConnection(connection => EnqueuedJobs(connection, enqueuedJobIds));
-
-                result.Add(new QueueWithTopEnqueuedJobsDto
-                {
+                result.Add(new QueueWithTopEnqueuedJobsDto {
                     Name = tuple.Queue,
                     Length = counters.EnqueuedCount ?? 0,
                     Fetched = counters.FetchedCount,
@@ -59,19 +57,19 @@ namespace Hangfire.Storage.MySql.Monitoring
             return UseConnection<IList<ServerDto>>(connection =>
             {
                 var servers = 
-                    connection.Query<Entities.Server>($"select * from `{_storageOptions.TablesPrefix}Server`").ToList();
+                    connection.Query<Entities.Server>(
+                        $"select * from `{_storageOptions.TablesPrefix}Server`").ToList();
 
                 var result = new List<ServerDto>();
 
                 foreach (var server in servers)
                 {
                     var data = JobHelper.FromJson<ServerData>(server.Data);
-                    result.Add(new ServerDto
-                    {
+                    result.Add(new ServerDto {
                         Name = server.Id,
                         Heartbeat = server.LastHeartbeat,
                         Queues = data.Queues,
-                        StartedAt = data.StartedAt.HasValue ? data.StartedAt.Value : DateTime.MinValue,
+                        StartedAt = data.StartedAt ?? DateTime.MinValue,
                         WorkersCount = data.WorkerCount
                     });
                 }
@@ -84,11 +82,10 @@ namespace Hangfire.Storage.MySql.Monitoring
         {
             return UseConnection(connection =>
             {
-
-                string sql = $@"
-select * from `{_storageOptions.TablesPrefix}Job` where Id = @id;
-select * from `{_storageOptions.TablesPrefix}JobParameter` where JobId = @id;
-select * from `{_storageOptions.TablesPrefix}State` where JobId = @id order by Id desc;";
+                string sql = $@"/* select Job, Parameter & State for JobId */
+                    select * from `{_storageOptions.TablesPrefix}Job` where Id = @id;
+                    select * from `{_storageOptions.TablesPrefix}JobParameter` where JobId = @id;
+                    select * from `{_storageOptions.TablesPrefix}State` where JobId = @id order by Id desc;";
 
                 using (var multi = connection.QueryMultiple(sql, new { id = jobId }))
                 {
@@ -124,28 +121,27 @@ select * from `{_storageOptions.TablesPrefix}State` where JobId = @id order by I
 
         public StatisticsDto GetStatistics()
         {
-             string jobQuery = $"select count(Id) from `{_storageOptions.TablesPrefix}Job` where StateName = @stateName";
-             string succeededQuery = $@"
-select sum(s.`Value`) from (
-    select sum(`Value`) as `Value` from `{_storageOptions.TablesPrefix}Counter` where `Key` = @key
-    union all
-    select `Value` from `{_storageOptions.TablesPrefix}AggregatedCounter` where `Key` = @key
-) as s;";
+             var jobQuery = $@"/* count Jobs */
+                select count(Id) from `{_storageOptions.TablesPrefix}Job` where StateName = @stateName";
+             var succeededQuery = $@"/* aggregate counters */
+                select sum(s.`Value`) from (
+                    select sum(`Value`) as `Value` from `{_storageOptions.TablesPrefix}Counter` where `Key` = @key
+                    union all
+                    select `Value` from `{_storageOptions.TablesPrefix}AggregatedCounter` where `Key` = @key
+                ) as s;";
 
-            var statistics = 
-                UseConnection(connection => 
-                    new StatisticsDto
-                    {
-                        Enqueued = connection.ExecuteScalar<int>(jobQuery, new {stateName = "Enqueued"}),
-                        Failed = connection.ExecuteScalar<int>(jobQuery, new {stateName = "Failed"}),
-                        Processing = connection.ExecuteScalar<int>(jobQuery, new {stateName = "Processing"}),
-                        Scheduled = connection.ExecuteScalar<int>(jobQuery, new {stateName = "Scheduled"}),
-                        Servers = connection.ExecuteScalar<int>($"select count(Id) from `{_storageOptions.TablesPrefix}Server`"),
-                        Succeeded = connection.ExecuteScalar<int>(succeededQuery, new {key = "stats:succeeded"}),
-                        Deleted = connection.ExecuteScalar<int>(succeededQuery, new {key = "stats:deleted"}),
-                        Recurring =
-                            connection.ExecuteScalar<int>($"select count(*) from `{_storageOptions.TablesPrefix}Set` where `Key` = 'recurring-jobs'")
-                    });
+             var statistics = UseConnection(connection =>
+                 new StatisticsDto {
+                     Enqueued = connection.ExecuteScalar<int>(jobQuery, new { stateName = "Enqueued" }),
+                     Failed = connection.ExecuteScalar<int>(jobQuery, new { stateName = "Failed" }),
+                     Processing = connection.ExecuteScalar<int>(jobQuery, new { stateName = "Processing" }),
+                     Scheduled = connection.ExecuteScalar<int>(jobQuery, new { stateName = "Scheduled" }),
+                     Servers = connection.ExecuteScalar<int>($"select count(Id) from `{_storageOptions.TablesPrefix}Server`"),
+                     Succeeded = connection.ExecuteScalar<int>(succeededQuery, new { key = "stats:succeeded" }),
+                     Deleted = connection.ExecuteScalar<int>(succeededQuery, new { key = "stats:deleted" }),
+                     Recurring = connection.ExecuteScalar<int>($@"
+                        select count(*) from `{_storageOptions.TablesPrefix}Set` where `Key` = 'recurring-jobs'")
+                 });
 
             statistics.Queues = _storage.QueueProviders
                 .SelectMany(x => x.GetJobQueueMonitoringApi().GetQueues())
@@ -157,15 +153,14 @@ select sum(s.`Value`) from (
         public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int @from, int perPage)
         {
             var queueApi = GetQueueApi(queue);
-            var enqueuedJobIds = queueApi.GetEnqueuedJobIds(queue, from, perPage);
-
-            return UseConnection(connection => EnqueuedJobs(connection, enqueuedJobIds));
+            var enqueuedJobIds = queueApi.GetEnqueuedJobIds(queue, from, perPage).ToArray();
+            return UseConnection(c => EnqueuedJobs(c, enqueuedJobIds));
         }
 
         public JobList<FetchedJobDto> FetchedJobs(string queue, int @from, int perPage)
         {
             var queueApi = GetQueueApi(queue);
-            var fetchedJobIds = queueApi.GetFetchedJobIds(queue, from, perPage);
+            var fetchedJobIds = queueApi.GetFetchedJobIds(queue, from, perPage).ToArray();
 
             return UseConnection(connection => FetchedJobs(connection, fetchedJobIds));
         }
@@ -190,8 +185,7 @@ select sum(s.`Value`) from (
                 connection,
                 from, count,
                 ScheduledState.StateName,
-                (sqlJob, job, stateData) => new ScheduledJobDto
-                {
+                (sqlJob, job, stateData) => new ScheduledJobDto {
                     Job = job,
                     EnqueueAt = JobHelper.DeserializeDateTime(stateData["EnqueueAt"]),
                     ScheduledAt = JobHelper.DeserializeDateTime(stateData["ScheduledAt"])
@@ -200,18 +194,24 @@ select sum(s.`Value`) from (
 
         public JobList<SucceededJobDto> SucceededJobs(int @from, int count)
         {
+            long? ExtractTotalDuration(IReadOnlyDictionary<string, string> stateData)
+            {
+                const string durationName = "PerformanceDuration";
+                const string latencyName = "Latency";
+                return stateData.ContainsKey(durationName) && stateData.ContainsKey(latencyName)
+                    ? long.Parse(stateData[durationName]) + long.Parse(stateData[latencyName])
+                    : default(long?);
+            }
+
             return UseConnection(connection => GetJobs(
                 connection,
                 from,
                 count,
                 SucceededState.StateName,
-                (sqlJob, job, stateData) => new SucceededJobDto
-                {
+                (sqlJob, job, stateData) => new SucceededJobDto {
                     Job = job,
                     Result = stateData.ContainsKey("Result") ? stateData["Result"] : null,
-                    TotalDuration = stateData.ContainsKey("PerformanceDuration") && stateData.ContainsKey("Latency")
-                        ? (long?)long.Parse(stateData["PerformanceDuration"]) + (long?)long.Parse(stateData["Latency"])
-                        : null,
+                    TotalDuration = ExtractTotalDuration(stateData),
                     SucceededAt = JobHelper.DeserializeNullableDateTime(stateData["SucceededAt"])
                 }));
         }
@@ -223,8 +223,7 @@ select sum(s.`Value`) from (
                 from,
                 count,
                 FailedState.StateName,
-                (sqlJob, job, stateData) => new FailedJobDto
-                {
+                (sqlJob, job, stateData) => new FailedJobDto {
                     Job = job,
                     Reason = sqlJob.StateReason,
                     ExceptionDetails = stateData["ExceptionDetails"],
@@ -241,8 +240,7 @@ select sum(s.`Value`) from (
                 from,
                 count,
                 DeletedState.StateName,
-                (sqlJob, job, stateData) => new DeletedJobDto
-                {
+                (sqlJob, job, stateData) => new DeletedJobDto {
                     Job = job,
                     DeletedAt = JobHelper.DeserializeNullableDateTime(stateData["DeletedAt"])
                 }));
@@ -317,11 +315,9 @@ select sum(s.`Value`) from (
             return UseConnection(connection =>
                 GetHourlyTimelineStats(connection, "failed"));
         }
-
-        private T UseConnection<T>(Func<MySqlConnection, T> action)
-        {
-            return _storage.UseTransaction(action, IsolationLevel.ReadUncommitted);
-        }
+        
+        private T UseConnection<T>(Func<MySqlConnection, T> action) => 
+            _storage.UseConnection(action);
 
         private long GetNumberOfJobsByStateName(MySqlConnection connection, string stateName)
         {
@@ -351,21 +347,19 @@ select sum(s.`Value`) from (
             string stateName,
             Func<SqlJob, Job, Dictionary<string, string>, TDto> selector)
         {
-            string jobsSql =
-$@"select * from (
-  select j.*, s.Reason as StateReason, s.Data as StateData, @rownum := @rownum + 1 AS `rank`
-  from `{_storageOptions.TablesPrefix}Job` j
-    cross join (SELECT @rownum := 0) r
-  left join `{_storageOptions.TablesPrefix}State` s on j.StateId = s.Id
-  where j.StateName = @stateName
-  order by j.Id desc
-) as j where j.`rank` between @start and @end ";
+            var jobsSql =
+                $@"select * from (
+                  select j.*, s.Reason as StateReason, s.Data as StateData, @rownum := @rownum + 1 AS `rank`
+                  from `{_storageOptions.TablesPrefix}Job` j
+                    cross join (SELECT @rownum := 0) r
+                  left join `{_storageOptions.TablesPrefix}State` s on j.StateId = s.Id
+                  where j.StateName = @stateName
+                  order by j.Id desc
+                ) as j where j.`rank` between @start and @end ";
 
-            var jobs = 
-                connection.Query<SqlJob>(
-                    jobsSql,
-                    new { stateName = stateName, start = @from + 1, end = @from + count })
-                    .ToList();
+            var jobs = connection.Query<SqlJob>(
+                    jobsSql, new { stateName, start = @from + 1, end = @from + count })
+                .ToList();
 
             return DeserializeJobs(jobs, selector);
         }
@@ -448,29 +442,21 @@ $@"select * from (
         }
 
         private JobList<EnqueuedJobDto> EnqueuedJobs(
-            MySqlConnection connection,
-            IEnumerable<int> jobIds)
+            MySqlConnection connection, int[] ids)
         {
             string enqueuedJobsSql = 
-$@"select j.*, s.Reason as StateReason, s.Data as StateData 
-from `{_storageOptions.TablesPrefix}Job` j
-left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
-where j.Id in @jobIds";
+                $@"select j.*, s.Reason as StateReason, s.Data as StateData 
+                from `{_storageOptions.TablesPrefix}Job` j
+                left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
+                where j.Id in @jobIds";
 
-            var jobs = new List<SqlJob>();
-
-            if (jobIds.Any())
-            {
-                jobs = connection.Query<SqlJob>(
-                enqueuedJobsSql,
-                new { jobIds = jobIds })
-                .ToList();
-            }
+            var jobs = ids.Any()
+                ? connection.Query<SqlJob>(enqueuedJobsSql, new { jobIds = ids }).ToArray()
+                : Array.Empty<SqlJob>();
 
             return DeserializeJobs(
                 jobs,
-                (sqlJob, job, stateData) => new EnqueuedJobDto
-                {
+                (sqlJob, job, stateData) => new EnqueuedJobDto {
                     Job = job,
                     State = sqlJob.StateName,
                     EnqueuedAt = sqlJob.StateName == EnqueuedState.StateName
@@ -480,38 +466,27 @@ where j.Id in @jobIds";
         }
 
         private JobList<FetchedJobDto> FetchedJobs(
-            MySqlConnection connection,
-            IEnumerable<int> jobIds)
+            MySqlConnection connection, int[] ids)
         {
-            string fetchedJobsSql = $@"
-select j.*, s.Reason as StateReason, s.Data as StateData 
-from `{_storageOptions.TablesPrefix}Job` j
-left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
-where j.Id in @jobIds";
+            var fetchedJobsSql = $@"/* Jobs with State */
+                select j.*, s.Reason as StateReason, s.Data as StateData 
+                from `{_storageOptions.TablesPrefix}Job` j
+                left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
+                where j.Id in @jobIds";
+            
+            KeyValuePair<string, FetchedJobDto> ToPair(SqlJob sqlJob) =>
+                new KeyValuePair<string, FetchedJobDto>(
+                    sqlJob.Id.ToString(),
+                    new FetchedJobDto {
+                        Job = DeserializeJob(sqlJob.InvocationData, sqlJob.Arguments),
+                        State = sqlJob.StateName,
+                    });
 
-            var jobs = new List<SqlJob>();
-            if (jobIds.Any())
-            {
-                jobs = connection.Query<SqlJob>(
-                fetchedJobsSql,
-                new { jobIds = jobIds })
-                .ToList();
-            }
+            var jobs = ids.Any()
+                ? connection.Query<SqlJob>(fetchedJobsSql, new { jobIds = ids }).ToArray()
+                : Array.Empty<SqlJob>();
 
-            var result = new List<KeyValuePair<string, FetchedJobDto>>(jobs.Count);
-
-            foreach (var job in jobs)
-            {
-                result.Add(new KeyValuePair<string, FetchedJobDto>(
-                    job.Id.ToString(),
-                    new FetchedJobDto
-                    {
-                        Job = DeserializeJob(job.InvocationData, job.Arguments),
-                        State = job.StateName,
-                    }));
-            }
-
-            return new JobList<FetchedJobDto>(result);
+            return new JobList<FetchedJobDto>(jobs.Select(ToPair));
         }
 
         private Dictionary<DateTime, long> GetHourlyTimelineStats(
@@ -526,7 +501,7 @@ where j.Id in @jobIds";
                 endDate = endDate.AddHours(-1);
             }
 
-            var keyMaps = dates.ToDictionary(x => String.Format("stats:{0}:{1}", type, x.ToString("yyyy-MM-dd-HH")), x => x);
+            var keyMaps = dates.ToDictionary(x => $"stats:{type}:{x:yyyy-MM-dd-HH}", x => x);
 
             return GetTimelineStats(connection, keyMaps);
         }

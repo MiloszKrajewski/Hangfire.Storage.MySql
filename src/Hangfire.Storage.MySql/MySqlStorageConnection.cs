@@ -479,15 +479,17 @@ order by Id desc";
             if (key == null) throw new ArgumentNullException("key");
             if (keyValuePairs == null) throw new ArgumentNullException("keyValuePairs");
 
-            _storage.UseTransaction(connection =>
-            {
+            _storage.UseTransaction(transaction => {
+                var connection = transaction.Connection;
                 foreach (var keyValuePair in keyValuePairs)
                 {
                     connection.Execute(
-                        $"insert into `{_storageOptions.TablesPrefix}Hash` (`Key`, Field, Value) " +
+                        $@"/* insert into hash */
+                        insert into `{_storageOptions.TablesPrefix}Hash` (`Key`, Field, Value) " +
                         "value (@key, @field, @value) " +
                         "on duplicate key update Value = @value",
-                        new { key = key, field = keyValuePair.Key, value = keyValuePair.Value });
+                        new { key = key, field = keyValuePair.Key, value = keyValuePair.Value },
+                        transaction);
                 }
             });
         }

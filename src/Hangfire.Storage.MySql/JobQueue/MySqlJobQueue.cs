@@ -93,13 +93,25 @@ namespace Hangfire.Storage.MySql.JobQueue
 
         public void Enqueue(IDbConnection connection, string queue, string jobId)
         {
+            Enqueue(connection, null, queue, jobId);
+        }
+
+        public void Enqueue(IDbTransaction transaction, string queue, string jobId)
+        {
+            Enqueue(transaction.Connection, transaction, queue, jobId);
+        }
+
+        public void Enqueue(
+            IDbConnection connection, IDbTransaction transaction, string queue, string jobId)
+        {
             Logger.TraceFormat("Enqueue JobId={0} Queue={1}", jobId, queue);
             using (ResourceLock.AcquireOne(
-                connection, _options.TablesPrefix, LockableResource.Queue))
+                connection, transaction, _options.TablesPrefix, LockableResource.Queue))
             {
                 connection.Execute(
                     $"insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue) values (@jobId, @queue)",
-                    new { jobId, queue });
+                    new { jobId, queue },
+                    transaction);
             }
         }
     }

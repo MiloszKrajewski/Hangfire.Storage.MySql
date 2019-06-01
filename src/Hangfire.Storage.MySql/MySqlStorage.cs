@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
-using System.Transactions;
 using Dapper;
 using Hangfire.Annotations;
 using Hangfire.Logging;
@@ -11,7 +10,6 @@ using Hangfire.Server;
 using Hangfire.Storage.MySql.JobQueue;
 using Hangfire.Storage.MySql.Monitoring;
 using MySql.Data.MySqlClient;
-using IsolationLevel = System.Transactions.IsolationLevel;
 
 namespace Hangfire.Storage.MySql
 {
@@ -142,7 +140,7 @@ namespace Hangfire.Storage.MySql
             return nameOrConnectionString.Contains(";");
         }
 
-        internal void UseTransaction([InstantHandle] Action<MySqlConnection> action)
+        internal void UseTransaction([InstantHandle] Action<MySqlTransaction> action)
         {
             UseTransaction(connection =>
             {
@@ -152,30 +150,22 @@ namespace Hangfire.Storage.MySql
         }
 
         internal T UseTransaction<T>(
-            [InstantHandle] Func<MySqlConnection, T> func, IsolationLevel? isolationLevel)
+            [InstantHandle] Func<MySqlTransaction, T> func, IsolationLevel? isolationLevel)
         {
-            using (var tScope = new TransactionScope(
-                TransactionScopeOption.Required,
-                new TransactionOptions {
-                    IsolationLevel = isolationLevel ?? IsolationLevel.ReadCommitted,
-                    Timeout = TimeSpan.FromMinutes(1),
-                },
-                TransactionScopeAsyncFlowOption.Enabled))
+            var connection = CreateAndOpenConnection();
+            try
             {
-                MySqlConnection connection = null;
-
-                try
+                using (var transaction = connection.BeginTransaction(
+                    isolationLevel ?? IsolationLevel.ReadCommitted))
                 {
-                    connection = CreateAndOpenConnection();
-                    var result = func(connection);
-                    tScope.Complete();
-
+                    var result = func(transaction);
+                    transaction.Commit();
                     return result;
                 }
-                finally
-                {
-                    ReleaseConnection(connection);
-                }
+            }
+            finally
+            {
+                ReleaseConnection(connection);
             }
         }
 
