@@ -1,3 +1,6 @@
+## 2.0.4-beta (2019/06/01)
+* replaced TransactionScope with "normal" transactions
+
 ## 2.0.3-beta (2019/05/31)
 * added exclusive lock to run migrations
 * change type for Set.Score from float to double

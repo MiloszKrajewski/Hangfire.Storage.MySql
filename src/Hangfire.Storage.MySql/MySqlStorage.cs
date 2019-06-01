@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using Hangfire.Logging;
 using System.Linq;
 using System.Text;
-using Dapper;
 using Hangfire.Annotations;
-using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.JobQueue;
+using Hangfire.Storage.MySql.Locking;
 using Hangfire.Storage.MySql.Monitoring;
 using MySql.Data.MySqlClient;
 
@@ -197,7 +197,7 @@ namespace Hangfire.Storage.MySql
         {
             var connection = new MySqlConnection(_connectionString);
             connection.Open();
-            connection.Execute("do release_all_locks()");
+            ResourceLock.ReleaseAll(connection);
             return connection;
         }
 
@@ -208,6 +208,7 @@ namespace Hangfire.Storage.MySql
                 connection.Dispose();
             }
         }
+        
         public void Dispose()
         {
         }
