@@ -1,0 +1,12 @@
+﻿System.Reactive
+System.Interactive
+Newtonsoft.Json
+
+Microsoft.Extensions.DependencyInjection
+Microsoft.Extensions.DependencyInjection.Abstractions
+Microsoft.Extensions.Logging
+Microsoft.Extensions.Logging.Abstractions
+
+CommandLineParser
+Dapper
+MySqlConnector

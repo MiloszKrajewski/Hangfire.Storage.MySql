@@ -7,6 +7,7 @@ nuget System.ValueTuple
 nuget System.Reactive
 nuget System.Interactive
 nuget Newtonsoft.Json
+nuget CommandLineParser
 
 nuget Microsoft.Extensions.DependencyInjection
 nuget Microsoft.Extensions.DependencyInjection.Abstractions

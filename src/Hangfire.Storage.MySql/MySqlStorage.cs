@@ -154,20 +154,20 @@ namespace Hangfire.Storage.MySql
         internal T UseTransaction<T>(
             [InstantHandle] Func<MySqlConnection, T> func, IsolationLevel? isolationLevel)
         {
-            using (var tScope = new TransactionScope(TransactionScopeOption.Required,
-                new TransactionOptions
-                {
-                    IsolationLevel = isolationLevel ?? IsolationLevel.ReadCommitted
+            using (var tScope = new TransactionScope(
+                TransactionScopeOption.Required,
+                new TransactionOptions {
+                    IsolationLevel = isolationLevel ?? IsolationLevel.ReadCommitted,
+                    Timeout = TimeSpan.FromMinutes(1),
                 },
                 TransactionScopeAsyncFlowOption.Enabled))
             {
-
                 MySqlConnection connection = null;
 
                 try
                 {
                     connection = CreateAndOpenConnection();
-                    T result = func(connection);
+                    var result = func(connection);
                     tScope.Complete();
 
                     return result;
