@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 using Dapper;
-using Hangfire.Common;
 using Hangfire.Logging;
+using System.Linq;
+using Hangfire.Common;
 using Hangfire.States;
 using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
@@ -20,9 +19,6 @@ namespace Hangfire.Storage.MySql
 
         private readonly Queue<Action<MySqlTransaction>> _commandQueue
             = new Queue<Action<MySqlTransaction>>();
-
-        private readonly List<LockableResource> _resources 
-            = new List<LockableResource>();
 
         public MySqlWriteOnlyTransaction(MySqlStorage storage, MySqlStorageOptions storageOptions)
         {
@@ -375,15 +371,9 @@ namespace Hangfire.Storage.MySql
         public override void Commit()
         {
             _storage.UseTransaction(transaction => {
-                using (ResourceLock.AcquireMany(
-                    transaction, _storageOptions.TablesPrefix,
-                    TimeSpan.FromSeconds(30), CancellationToken.None,
-                    _resources.ToArray()))
+                foreach (var command in _commandQueue)
                 {
-                    foreach (var command in _commandQueue)
-                    {
-                        command(transaction);
-                    }
+                    command(transaction);
                 }
             });
         }
@@ -393,9 +383,10 @@ namespace Hangfire.Storage.MySql
             _commandQueue.Enqueue(action);
         }
         
-        private void AcquireLock(LockableResource resource)
+        private void AcquireLock(LockableResource _)
         {
-            _resources.Add(resource);
+            // no locks are acquired, this solution rely on 'deadlock exception' and 'retry'
+            // it may lead to starvation, that's why it is experimental
         }
         
         private void AcquireJobLock()

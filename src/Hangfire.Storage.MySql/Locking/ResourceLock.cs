@@ -3,10 +3,11 @@ using System.Data;
 using System.Linq;
 using System.Threading;
 using Dapper;
+using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql.Locking
 {
-	public class ResourceLock: IDisposable
+	public class _ResourceLock: IDisposable
 	{
 		private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
@@ -14,7 +15,7 @@ namespace Hangfire.Storage.MySql.Locking
 		private readonly IDbTransaction _transaction;
 		private readonly string _resource;
 
-		private ResourceLock(
+		private _ResourceLock(
 			IDbConnection connection,
 			IDbTransaction transaction,
 			DateTime timeout, CancellationToken token,
@@ -68,7 +69,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 		public static void ReleaseAll(IDbConnection connection) =>
 			connection.Execute("do release_all_locks()");
-		
+
 		public static IDisposable AcquireOne(
 			IDbTransaction transaction, string tablePrefix, LockableResource resource) =>
 			AcquireOne(transaction.Connection, transaction, tablePrefix, resource);
@@ -76,27 +77,27 @@ namespace Hangfire.Storage.MySql.Locking
 		public static IDisposable AcquireOne(
 			IDbConnection connection, string tablePrefix, LockableResource resource) =>
 			AcquireOne(connection, null, tablePrefix, resource);
-		
+
 		public static IDisposable AcquireOne(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
 			LockableResource resource) =>
 			AcquireOne(
-				connection, transaction, tablePrefix, 
-				DefaultTimeout, CancellationToken.None, 
+				connection, transaction, tablePrefix,
+				DefaultTimeout, CancellationToken.None,
 				resource);
-		
+
 		public static IDisposable AcquireOne(
 			IDbConnection connection, string tablePrefix,
 			TimeSpan timeout, CancellationToken token,
 			LockableResource resource) =>
 			AcquireOne(connection, null, tablePrefix, timeout, token, resource);
-		
+
 		public static IDisposable AcquireOne(
 			IDbTransaction transaction, string tablePrefix,
 			TimeSpan timeout, CancellationToken token,
 			LockableResource resource) =>
 			AcquireOne(transaction.Connection, transaction, tablePrefix, timeout, token, resource);
-		
+
 		public static IDisposable AcquireOne(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
 			TimeSpan timeout, CancellationToken token,
@@ -109,7 +110,7 @@ namespace Hangfire.Storage.MySql.Locking
 			TimeSpan timeout, CancellationToken token,
 			LockableResource[] resources) =>
 			AcquireMany(
-				connection, null, tablePrefix, 
+				connection, null, tablePrefix,
 				timeout, token,
 				resources);
 
@@ -118,10 +119,10 @@ namespace Hangfire.Storage.MySql.Locking
 			TimeSpan timeout, CancellationToken token,
 			LockableResource[] resources) =>
 			AcquireMany(
-				transaction.Connection, transaction, tablePrefix, 
-				timeout, token, 
+				transaction.Connection, transaction, tablePrefix,
+				timeout, token,
 				resources);
-		
+
 		public static IDisposable AcquireMany(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
 			TimeSpan timeout, CancellationToken token,
@@ -129,7 +130,7 @@ namespace Hangfire.Storage.MySql.Locking
 			AcquireMany(
 				connection, transaction, tablePrefix, timeout, token,
 				resources.Select(x => x.ToString()).ToArray());
-		
+
 		private static IDisposable AcquireOne(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
 			TimeSpan timeout, CancellationToken token,
@@ -145,7 +146,7 @@ namespace Hangfire.Storage.MySql.Locking
 			params string[] resourceNames)
 		{
 			var handles = new DisposableBag();
-			
+
 			try
 			{
 				var expiration = Now.Add(timeout); // stop trying @
@@ -155,9 +156,9 @@ namespace Hangfire.Storage.MySql.Locking
 
 				foreach (var resourceName in orderedResourceNames)
 				{
-					var handle = new ResourceLock(
+					var handle = new _ResourceLock(
 						connection, transaction,
-						expiration, token, 
+						expiration, token,
 						$"{tablePrefix}/{resourceName}");
 					handles.Add(handle);
 
@@ -172,5 +173,9 @@ namespace Hangfire.Storage.MySql.Locking
 
 			return handles;
 		}
+
+		public static IDisposable AcquireAny(
+			IDbConnection connection, string tablePrefix, TimeSpan timeout, string resource) =>
+			AcquireOne(connection, null, tablePrefix, timeout, CancellationToken.None, resource);
 	}
 }

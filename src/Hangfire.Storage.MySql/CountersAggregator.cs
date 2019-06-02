@@ -3,7 +3,6 @@ using System.Threading;
 using Dapper;
 using Hangfire.Logging;
 using Hangfire.Server;
-using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
@@ -45,19 +44,18 @@ namespace Hangfire.Storage.MySql
 
 		private int AggregateCounter(MySqlConnection connection)
 		{
-			using (ResourceLock.AcquireOne(
-				connection, _options.TablesPrefix, LockableResource.Counter))
-			{
-				return connection.Execute(
-					GetAggregationQuery(),
-					new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
-			}
+			#warning with overlapping execution is is possible to count some rows twice?
+			return connection.Execute(
+				GetAggregationQuery(),
+				new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
 		}
 
 		private string GetAggregationQuery()
 		{
 			var prefix = _options.TablesPrefix;
 			return $@"
+                drop table if exists __refs__;
+
                 create temporary table __refs__ engine = memory as
                     select `Id` from `lib1_Counter` limit @count;
 

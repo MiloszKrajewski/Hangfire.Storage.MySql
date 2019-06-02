@@ -2,15 +2,13 @@
 using System.Data;
 using System.Data.Common;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading;
-using System.Xml.Linq;
 using Dapper;
 using Hangfire.Logging;
+using System.Linq;
+using System.Text;
+using System.Xml.Linq;
 using Hangfire.Storage.MySql.Locking;
-
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
@@ -49,10 +47,7 @@ namespace Hangfire.Storage.MySql
 
             var prefix = tablesPrefix ?? string.Empty;
 
-            using (ResourceLock.AcquireOne(
-                connection, prefix, 
-                MigrationTimeout, CancellationToken.None, 
-                LockableResource.Migration))
+            using (_ResourceLock.AcquireAny(connection, prefix, MigrationTimeout, "migrations"))
             {
                 var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Migrations.xml";
                 var document = XElement.Parse(GetStringResource(resourceName));

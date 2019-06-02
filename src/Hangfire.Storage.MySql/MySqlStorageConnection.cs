@@ -7,6 +7,7 @@ using Hangfire.Common;
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Entities;
+using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql
 {
@@ -32,9 +33,10 @@ namespace Hangfire.Storage.MySql
             var connection = _storage.CreateAndOpenConnection();
             try
             {
-                var handle = new MySqlDistributedLock(connection, resource, timeout, _storageOptions);
-                handle.Acquire();
-                return DisposableBag.Create(handle, connection);
+                return DisposableBag.Create(
+                    _ResourceLock.AcquireAny(
+                        connection, _storageOptions.TablesPrefix, timeout, resource),
+                    connection);
             }
             catch
             {
@@ -114,12 +116,12 @@ namespace Hangfire.Storage.MySql
             if (id == null) throw new ArgumentNullException("id");
             if (name == null) throw new ArgumentNullException("name");
 
-            _storage.UseConnection(connection =>
-            {
+            _storage.UseConnection(connection => {
                 connection.Execute(
-                    $"insert into `{_storageOptions.TablesPrefix}JobParameter` (JobId, Name, Value) " +
-                    "value (@jobId, @name, @value) " +
-                    "on duplicate key update Value = @value ",
+                    $@"/* MySqlStorageConnection.SetJobParameter */
+                    insert into `{_storageOptions.TablesPrefix}JobParameter` (JobId, Name, Value) 
+                    value (@jobId, @name, @value) 
+                    on duplicate key update Value = @value",
                     new { jobId = id, name, value });
             });
         }
@@ -449,10 +451,10 @@ where ranked.`rank` between @startingFrom and @endingAt";
         {
             if (key == null) throw new ArgumentNullException("key");
 
-            string query = $@"
-select `Value` from `{_storageOptions.TablesPrefix}List`
-where `Key` = @key
-order by Id desc";
+            var query = $@"/* MySqlStorageConnection.GetAllItemsFromList */
+                select `Value` from `{_storageOptions.TablesPrefix}List`
+                where `Key` = @key
+                order by Id desc";
 
             return _storage.UseConnection(connection => connection.Query<string>(query, new { key = key }).ToList());
         }

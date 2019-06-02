@@ -40,19 +40,15 @@ namespace Hangfire.Storage.MySql.JobQueue
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
-					using (ResourceLock.AcquireOne(
-						connection, _options.TablesPrefix, LockableResource.Queue))
-					{
-						var updated = ClaimJob(connection, queues, expiration, token);
+					var updated = ClaimJob(connection, queues, expiration, token);
 
-						if (updated != 0)
-						{
-							var fetchedJob = FetchJobByToken(connection, token);
-							return new MySqlFetchedJob(
-								_storage, _options,
-								Interlocked.Exchange(ref connection, null),
-								fetchedJob);
-						}
+					if (updated != 0)
+					{
+						var fetchedJob = FetchJobByToken(connection, token);
+						return new MySqlFetchedJob(
+							_storage, _options,
+							Interlocked.Exchange(ref connection, null),
+							fetchedJob);
 					}
 
 					cancellationToken.WaitHandle.WaitOne(_options.QueuePollInterval);
@@ -66,23 +62,25 @@ namespace Hangfire.Storage.MySql.JobQueue
 			}
 			finally
 			{
-				if (connection != null)
-					_storage.ReleaseConnection(connection);
+				connection?.Dispose();
 			}
 		}
 
 		private int ClaimJob(
 			IDbConnection connection, string[] queues, TimeSpan expiration, string token)
 		{
-			var now = DateTime.Now;
-			var then = now.Subtract(expiration);
-			return connection.Execute(
-				$@"/* MySqlJobQueue.ClaimJob */
-                update `{_options.TablesPrefix}JobQueue` 
-                set FetchedAt = @now, FetchToken = @token
-                where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
-                limit 1",
-				new { queues, now, then, token });
+			return Deadlock.Retry(
+				() => {
+					var now = DateTime.Now;
+					var then = now.Subtract(expiration);
+					return connection.Execute(
+						$@"/* MySqlJobQueue.ClaimJob */
+		                update `{_options.TablesPrefix}JobQueue` 
+		                set FetchedAt = @now, FetchToken = @token
+		                where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
+		                limit 1",
+						new { queues, now, then, token });
+				}, Logger);
 		}
 
 		private FetchedJob FetchJobByToken(IDbConnection connection, string token)
@@ -100,20 +98,16 @@ namespace Hangfire.Storage.MySql.JobQueue
 		{
 			Logger.TraceFormat("Enqueue JobId={0} Queue={1}", jobId, queue);
 
-			using (ResourceLock.AcquireOne(
-				connection, transaction, _options.TablesPrefix, LockableResource.Queue))
-			{
-				connection.Execute(
-					$@"/* MySqlJobQueue.Enqueue */
-                    insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue)
-                    values (@jobId, @queue)",
-					new { jobId, queue },
-					transaction);
-			}
+			connection.Execute(
+				$@"/* MySqlJobQueue.Enqueue */
+                insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue)
+                values (@jobId, @queue)",
+				new { jobId, queue },
+				transaction);
 		}
-		
+
 		public void Enqueue(IDbConnection connection, string queue, string jobId) =>
-			Enqueue(connection, null, queue, jobId);
+			Deadlock.Retry(() => Enqueue(connection, null, queue, jobId), Logger);
 
 		public void Enqueue(IDbTransaction transaction, string queue, string jobId) =>
 			Enqueue(transaction.Connection, transaction, queue, jobId);

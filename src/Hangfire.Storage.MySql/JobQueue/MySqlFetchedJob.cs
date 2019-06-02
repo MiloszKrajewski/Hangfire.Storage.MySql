@@ -40,28 +40,26 @@ namespace Hangfire.Storage.MySql.JobQueue
 		public void Dispose()
 		{
 			if (_disposed) return;
+			_disposed = true;
 
 			if (!_removed && !_requeued)
 			{
 				Requeue();
 			}
 
-			_storage.ReleaseConnection(_connection);
-
-			_disposed = true;
+			_connection?.Dispose();
 		}
 
 		public void RemoveFromQueue()
 		{
 			Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
 
-			using (ResourceLock.AcquireOne(
-				_connection, _options.TablesPrefix, LockableResource.Queue))
-			{
-				_connection.Execute(
-					$"delete from `{_options.TablesPrefix}JobQueue` where Id = @id",
-					new { id = _id });
-			}
+			Deadlock.Retry(
+				() => {
+					_connection.Execute(
+						$"delete from `{_options.TablesPrefix}JobQueue` where Id = @id",
+						new { id = _id });
+				}, Logger);
 
 			_removed = true;
 		}
@@ -70,13 +68,12 @@ namespace Hangfire.Storage.MySql.JobQueue
 		{
 			Logger.TraceFormat("Requeue JobId={0}", JobId);
 
-			using (ResourceLock.AcquireOne(
-				_connection, _options.TablesPrefix, LockableResource.Queue))
-			{
-				_connection.Execute(
-					$"update `{_options.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
-					new { id = _id });
-			}
+			Deadlock.Retry(
+				() => {
+					_connection.Execute(
+						$"update `{_options.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
+						new { id = _id });
+				}, Logger);
 
 			_requeued = true;
 		}

@@ -4,6 +4,7 @@ using System.Data;
 using Hangfire.Logging;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Hangfire.Annotations;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.JobQueue;
@@ -142,31 +143,38 @@ namespace Hangfire.Storage.MySql
 
         internal void UseTransaction([InstantHandle] Action<MySqlTransaction> action)
         {
-            UseTransaction(connection =>
-            {
+            UseTransaction(connection => {
                 action(connection);
                 return true;
-            }, null);
+            });
+        }
+       
+        internal T UseConnection<T>([InstantHandle] Func<MySqlConnection, T> func)
+        {
+            T Action()
+            {
+                using (var connection = CreateAndOpenConnection())
+                    return func(connection);
+            }
+
+            return Deadlock.Retry(Action, Logger);
         }
 
         internal T UseTransaction<T>(
-            [InstantHandle] Func<MySqlTransaction, T> func, IsolationLevel? isolationLevel)
+            [InstantHandle] Func<MySqlTransaction, T> func)
         {
-            var connection = CreateAndOpenConnection();
-            try
+            T Action()
             {
-                using (var transaction = connection.BeginTransaction(
-                    isolationLevel ?? IsolationLevel.ReadCommitted))
+                using (var connection = CreateAndOpenConnection())
+                using (var transaction = connection.BeginTransaction())
                 {
                     var result = func(transaction);
                     transaction.Commit();
                     return result;
                 }
             }
-            finally
-            {
-                ReleaseConnection(connection);
-            }
+
+            return Deadlock.Retry(Action, Logger);
         }
 
         internal void UseConnection([InstantHandle] Action<MySqlConnection> action)
@@ -178,37 +186,14 @@ namespace Hangfire.Storage.MySql
             });
         }
 
-        internal T UseConnection<T>([InstantHandle] Func<MySqlConnection, T> func)
-        {
-            MySqlConnection connection = null;
-
-            try
-            {
-                connection = CreateAndOpenConnection();
-                return func(connection);
-            }
-            finally
-            {
-                ReleaseConnection(connection);
-            }
-        }
-
         internal MySqlConnection CreateAndOpenConnection()
         {
             var connection = new MySqlConnection(_connectionString);
             connection.Open();
-            ResourceLock.ReleaseAll(connection);
+            _ResourceLock.ReleaseAll(connection);
             return connection;
         }
 
-        internal void ReleaseConnection(IDbConnection connection)
-        {
-            if (connection != null)
-            {
-                connection.Dispose();
-            }
-        }
-        
         public void Dispose()
         {
         }

@@ -54,13 +54,12 @@ namespace Hangfire.Storage.MySql
 					retry = false;
 				}
 
-				var (tableName, lockType) = ProcessedTables[index];
+				var (tableName, _) = ProcessedTables[index];
 
 				Logger.DebugFormat("Removing outdated records from table '{0}'...", tableName);
 
 				var removedCount = _storage.UseConnection(
-					connection => RemoveExpiredRows(
-						cancellationToken, connection, tablePrefix, tableName, lockType));
+					connection => RemoveExpiredRows(connection, tablePrefix, tableName));
 
 				if (removedCount > 0)
 				{
@@ -81,28 +80,14 @@ namespace Hangfire.Storage.MySql
 			cancellationToken.WaitHandle.WaitOne(_options.JobExpirationCheckInterval);
 		}
 
-		private int RemoveExpiredRows(
-			CancellationToken cancellationToken, MySqlConnection connection,
-			string tablePrefix, string tableName, LockableResource lockType)
+		private static int RemoveExpiredRows(
+			MySqlConnection connection, string tablePrefix, string tableName)
 		{
-			try
-			{
-				using (ResourceLock.AcquireOne(
-					connection, _options.TablesPrefix, DefaultLockTimeout, cancellationToken,
-					lockType))
-				{
-					var removedCount = connection.Execute(
-						$"delete from `{tablePrefix}{tableName}` where ExpireAt < @now limit @count",
-						new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
-					Logger.DebugFormat("removed records count={0}", removedCount);
-					return removedCount;
-				}
-			}
-			catch (MySqlException ex)
-			{
-				Logger.Error(ex.ToString());
-				return 0;
-			}
+			var removedCount = connection.Execute(
+				$"delete from `{tablePrefix}{tableName}` where ExpireAt < @now limit @count",
+				new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
+			Logger.DebugFormat("removed records count={0}", removedCount);
+			return removedCount;
 		}
 
 		public override string ToString() { return GetType().ToString(); }
