@@ -11,8 +11,8 @@ namespace Hangfire.Storage.MySql.Locking
 		private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
 		private readonly IDbConnection _connection;
+		private readonly IDbTransaction _transaction;
 		private readonly string _resource;
-		private IDbTransaction _transaction;
 
 		private ResourceLock(
 			IDbConnection connection,
