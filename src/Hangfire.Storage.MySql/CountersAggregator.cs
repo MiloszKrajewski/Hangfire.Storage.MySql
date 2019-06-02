@@ -57,7 +57,7 @@ namespace Hangfire.Storage.MySql
                 drop table if exists __refs__;
 
                 create temporary table __refs__ engine = memory as
-                    select `Id` from `lib1_Counter` limit @count;
+                    select `Id` from `{prefix}Counter` limit @count;
 
                 insert into `{prefix}AggregatedCounter` (`Key`, Value, ExpireAt)
                     select `Key`, SumValue, MaxExpireAt

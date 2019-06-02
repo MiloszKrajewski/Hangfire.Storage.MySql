@@ -64,10 +64,10 @@ namespace Hangfire.Storage.MySql.App
 		{
 			var logger = loggerFactory.CreateLogger("main");
 			var counter = 0;
+			var client = new BackgroundJobClient(storage);
 
 			void Create()
 			{
-				var client = new BackgroundJobClient(storage);
 				while (!token.IsCancellationRequested)
 				{
 					var i = Interlocked.Increment(ref counter);
