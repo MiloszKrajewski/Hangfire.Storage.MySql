@@ -11,15 +11,13 @@ namespace XaRecover
 {
 	public class Options
 	{
-		[Option(
-			'h', "host", Default = "localhost",
-			HelpText = "Database server (host[:port], default: localhost)")]
+		[Option('h', "host", Default = "localhost", HelpText = "Database server (host[:port])")]
 		public string Server { get; set; }
 
-		[Option('u', "user", Default = "mysql", HelpText = "User (default: mysql)")]
+		[Option('u', "user", Default = "mysql", HelpText = "User")]
 		public string User { get; set; }
 
-		[Option('p', "pass", Default = "mysql", HelpText = "Password (default: mysql)")]
+		[Option('p', "pass", Default = "mysql", HelpText = "Password")]
 		public string Password { get; set; }
 	}
 
@@ -108,9 +106,9 @@ namespace XaRecover
 			return (host, port);
 		}
 
-		private static void PrintErrors(IEnumerable<Error> enumerable)
+		private static void PrintErrors(IEnumerable<Error> errors)
 		{
-			throw new NotImplementedException();
+			Console.WriteLine("Error parsing arguments");
 		}
 	}
 }
