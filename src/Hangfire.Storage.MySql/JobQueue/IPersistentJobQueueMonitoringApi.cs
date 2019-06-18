@@ -2,7 +2,7 @@
 
 namespace Hangfire.Storage.MySql.JobQueue
 {
-    public interface IPersistentJobQueueMonitoringApi
+    internal interface IPersistentJobQueueMonitoringApi
     {
         IEnumerable<string> GetQueues();
         IEnumerable<int> GetEnqueuedJobIds(string queue, int from, int perPage);

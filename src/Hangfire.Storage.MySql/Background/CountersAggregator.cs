@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Data.Common;
 using System.Threading;
-using Dapper;
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Locking;
@@ -12,52 +12,67 @@ namespace Hangfire.Storage.MySql
 	{
 		private static readonly ILog Logger = LogProvider.GetLogger(typeof(CountersAggregator));
 
-		private const int NumberOfRecordsInSinglePass = 1000;
-		private static readonly TimeSpan DelayBetweenPasses = TimeSpan.FromMilliseconds(500);
+		private static readonly TimeSpan PassInterval = TimeSpan.FromMilliseconds(500);
+		private const int PassSize = 1000;
+
+		private const string LockName = "CountersAggregator";
+		private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
 
 		private readonly MySqlStorage _storage;
 		private readonly MySqlStorageOptions _options;
+		private readonly string _aggregationQuery;
 
 		public CountersAggregator(MySqlStorage storage, MySqlStorageOptions options)
 		{
 			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
 			_options = options ?? throw new ArgumentNullException(nameof(options));
+			_aggregationQuery = AggregationQuery(_options.TablesPrefix);
 		}
 
 		public void Execute(CancellationToken cancellationToken)
 		{
-			Logger.DebugFormat(
-				$"Aggregating records in '{_options.TablesPrefix}Counter' table...");
+			var prefix = _options.TablesPrefix;
+
+			Logger.DebugFormat($"Aggregating records in '{prefix}Counter' table...");
 
 			while (true)
 			{
-				var removedCount = _storage.UseConnection(AggregateCounter);
+				var removedCount = AggregateCounter(cancellationToken);
 
-				if (removedCount < NumberOfRecordsInSinglePass)
+				if (removedCount < PassSize)
 					break;
 
-				cancellationToken.WaitHandle.WaitOne(DelayBetweenPasses);
+				cancellationToken.WaitHandle.WaitOne(PassInterval);
 				cancellationToken.ThrowIfCancellationRequested();
 			}
 
 			cancellationToken.WaitHandle.WaitOne(_options.CountersAggregateInterval);
 		}
 
-		private int AggregateCounter(MySqlConnection connection)
+		private int AggregateCounter(CancellationToken token)
 		{
-			using (_ResourceLock.AcquireOne(
-				connection, _options.TablesPrefix, LockableResource.Counter))
+			var prefix = _options.TablesPrefix;
+
+			using (var connection = _storage.CreateAndOpenConnection())
+			using (AcquireGlobalLock(token, connection, prefix))
 			{
-				return connection.Execute(
-					GetAggregationQuery(),
-					new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
+				const int count = PassSize;
+
+				return Repeater
+					.Create(connection, prefix)
+					.Lock(LockableResource.Counter)
+					.Wait(token)
+					.Log(Logger)
+					.Execute(_aggregationQuery, new { count });
 			}
 		}
 
-		private string GetAggregationQuery()
-		{
-			var prefix = _options.TablesPrefix;
-			return $@"
+		private static IDisposable AcquireGlobalLock(
+			CancellationToken token, DbConnection connection, string prefix) =>
+			_ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+
+		private static string AggregationQuery(string prefix) =>
+			$@"/* CountersAggregator.AggregateCounters */
                 drop table if exists __refs__;
 
                 create temporary table __refs__ engine = memory as
@@ -78,8 +93,7 @@ namespace Hangfire.Storage.MySql
 
                 drop table __refs__;
             ";
-		}
 
-		public override string ToString() => GetType().ToString();
+		public override string ToString() => GetType().GetFriendlyName();
 	}
 }

@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using Dapper;
 using Hangfire.Logging;
@@ -11,8 +11,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 	{
 		private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlFetchedJob));
 
-		private readonly MySqlStorage _storage;
-		private readonly IDbConnection _connection;
+		private readonly DbConnection _connection;
 		private readonly MySqlStorageOptions _options;
 		private readonly int _id;
 		private bool _removed;
@@ -20,12 +19,10 @@ namespace Hangfire.Storage.MySql.JobQueue
 		private bool _disposed;
 
 		public MySqlFetchedJob(
-			MySqlStorage storage,
 			MySqlStorageOptions options,
-			IDbConnection connection,
+			DbConnection connection,
 			FetchedJob fetchedJob)
 		{
-			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
 			_connection = connection ?? throw new ArgumentNullException(nameof(connection));
 			_options = options ?? throw new ArgumentNullException(nameof(options));
 
@@ -40,6 +37,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 		public void Dispose()
 		{
 			if (_disposed) return;
+
 			_disposed = true;
 
 			if (!_removed && !_requeued)
@@ -54,12 +52,18 @@ namespace Hangfire.Storage.MySql.JobQueue
 		{
 			Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
 
-			Deadlock.Retry(
-				() => {
-					_connection.Execute(
-						$"delete from `{_options.TablesPrefix}JobQueue` where Id = @id",
-						new { id = _id });
-				}, Logger);
+			int Action(IContext ctx) =>
+				ctx.C.Execute(
+					$"delete from `{ctx.Prefix}JobQueue` where Id = @id",
+					new { id = _id },
+					ctx.T);
+
+			Repeater
+				.Create(_connection, _options.TablesPrefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Long)
+				.Log(Logger)
+				.Execute(Action);
 
 			_removed = true;
 		}
@@ -68,12 +72,18 @@ namespace Hangfire.Storage.MySql.JobQueue
 		{
 			Logger.TraceFormat("Requeue JobId={0}", JobId);
 
-			Deadlock.Retry(
-				() => {
-					_connection.Execute(
-						$"update `{_options.TablesPrefix}JobQueue` set FetchedAt = null where Id = @id",
-						new { id = _id });
-				}, Logger);
+			int Action(IContext ctx) =>
+				ctx.C.Execute(
+					$"update `{ctx.Prefix}JobQueue` set FetchedAt = null where Id = @id",
+					new { id = _id },
+					ctx.T);
+
+			Repeater
+				.Create(_connection, _options.TablesPrefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Long)
+				.Log(Logger)
+				.Execute(Action);
 
 			_requeued = true;
 		}

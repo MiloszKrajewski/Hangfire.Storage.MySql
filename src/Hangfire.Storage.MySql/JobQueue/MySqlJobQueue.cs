@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data;
+using System.Data.Common;
 using Dapper;
 using Hangfire.Logging;
 using System.Linq;
@@ -15,11 +16,13 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		private readonly MySqlStorage _storage;
 		private readonly MySqlStorageOptions _options;
+		private readonly string _typeName;
 
 		public MySqlJobQueue(MySqlStorage storage, MySqlStorageOptions options)
 		{
 			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
 			_options = options ?? throw new ArgumentNullException(nameof(options));
+			_typeName = GetType().GetFriendlyName();
 		}
 
 		public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
@@ -34,21 +37,21 @@ namespace Hangfire.Storage.MySql.JobQueue
 			// is passed to job itself, and variable is set to null so it does not get
 			// disposed here in such case
 			var connection = _storage.CreateAndOpenConnection();
+			var prefix = _options.TablesPrefix;
 			try
 			{
 				while (true)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
-					var updated = ClaimJob(connection, queues, expiration, token);
+					var updated = ClaimJob(connection, prefix, queues, expiration, token);
 
 					if (updated != 0)
 					{
-						var fetchedJob = FetchJobByToken(connection, token);
-						return new MySqlFetchedJob(
-							_storage, _options,
-							Interlocked.Exchange(ref connection, null),
-							fetchedJob);
+						var fetchedJob = FetchJobByToken(connection, prefix, token);
+						var hijacked = connection;
+						connection = null;
+						return new MySqlFetchedJob(_options, hijacked, fetchedJob);
 					}
 
 					cancellationToken.WaitHandle.WaitOne(_options.QueuePollInterval);
@@ -66,51 +69,57 @@ namespace Hangfire.Storage.MySql.JobQueue
 			}
 		}
 
-		private int ClaimJob(
-			IDbConnection connection, string[] queues, TimeSpan expiration, string token)
+		private static int ClaimJob(
+			DbConnection connection, string prefix,
+			string[] queues, TimeSpan expiration, string token)
 		{
-			return Deadlock.Retry(
-				() => {
-					var now = DateTime.Now;
-					var then = now.Subtract(expiration);
-					return connection.Execute(
-						$@"/* MySqlJobQueue.ClaimJob */
-		                update `{_options.TablesPrefix}JobQueue` 
+			int Action(IContext ctx)
+			{
+				var now = DateTime.Now;
+				var then = now.Subtract(expiration);
+				return ctx.C.Execute(
+					$@"/* MySqlJobQueue.ClaimJob */
+		                update `{ctx.Prefix}JobQueue` 
 		                set FetchedAt = @now, FetchToken = @token
 		                where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
 		                limit 1",
-						new { queues, now, then, token });
-				}, Logger);
+					new { queues, now, then, token },
+					ctx.T);
+			}
+
+			return Repeater
+				.Create(connection, prefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Quick)
+				.Log(Logger)
+				.Execute(Action);
 		}
 
-		private FetchedJob FetchJobByToken(IDbConnection connection, string token)
-		{
-			return connection.QueryFirst<FetchedJob>(
+		private static FetchedJob FetchJobByToken(
+			IDbConnection connection, string prefix, string token) =>
+			connection.QueryFirst<FetchedJob>(
 				$@"/* MySqlJobQueue.FetchJobByToken */
                 select Id, JobId, Queue
-                from `{_options.TablesPrefix}JobQueue`
+                from `{prefix}JobQueue`
                 where FetchToken = @token",
 				new { token });
-		}
 
-		private void Enqueue(
-			IDbConnection connection, IDbTransaction transaction, string queue, string jobId)
-		{
-			Logger.TraceFormat("Enqueue JobId={0} Queue={1}", jobId, queue);
-
-			connection.Execute(
+		public void Enqueue(IContext context, string queue, string jobId) =>
+			context.C.Execute(
 				$@"/* MySqlJobQueue.Enqueue */
-                insert into `{_options.TablesPrefix}JobQueue` (JobId, Queue)
+                insert into `{context.Prefix}JobQueue` (JobId, Queue)
                 values (@jobId, @queue)",
 				new { jobId, queue },
-				transaction);
+				context.T);
+
+		public void Enqueue(IDbConnection connection, string queue, string jobId)
+		{
+			Repeater
+				.Create(connection, _options.TablesPrefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Quick)
+				.Log(Logger)
+				.Execute(ctx => Enqueue(ctx, queue, jobId));
 		}
-
-		public void Enqueue(IDbConnection connection, string queue, string jobId) =>
-			Deadlock.Retry(() => Enqueue(connection, null, queue, jobId), Logger);
-
-		public void Enqueue(IDbTransaction transaction, string queue, string jobId) =>
-			Enqueue(transaction.Connection, transaction, queue, jobId);
-
 	}
 }

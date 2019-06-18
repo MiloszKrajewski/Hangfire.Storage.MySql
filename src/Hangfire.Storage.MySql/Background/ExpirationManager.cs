@@ -1,12 +1,8 @@
 ﻿using System;
 using System.Threading;
-
-using Dapper;
-
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Locking;
-
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
@@ -15,9 +11,11 @@ namespace Hangfire.Storage.MySql
 	{
 		private static readonly ILog Logger = LogProvider.GetLogger(typeof(ExpirationManager));
 
-		private static readonly TimeSpan DefaultLockTimeout = TimeSpan.FromSeconds(30);
-		private static readonly TimeSpan DelayBetweenPasses = TimeSpan.FromSeconds(1);
-		private const int NumberOfRecordsInSinglePass = 1000;
+		private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
+		private const string LockName = "ExpirationManager";
+
+		private static readonly TimeSpan PassInterval = TimeSpan.FromSeconds(1);
+		private const int PassSize = 1000;
 
 		private static readonly (string, LockableResource)[] ProcessedTables = {
 			("AggregatedCounter", LockableResource.Counter),
@@ -38,7 +36,9 @@ namespace Hangfire.Storage.MySql
 
 		public void Execute(CancellationToken cancellationToken)
 		{
-			var tablePrefix = _options.TablesPrefix;
+			var passInterval = PassInterval;
+			var batchInterval = _options.JobExpirationCheckInterval;
+
 			var retry = true;
 			var index = 0;
 
@@ -54,42 +54,54 @@ namespace Hangfire.Storage.MySql
 					retry = false;
 				}
 
-				var (tableName, _) = ProcessedTables[index];
+				var (table, resource) = ProcessedTables[index];
 
-				Logger.DebugFormat("Removing outdated records from table '{0}'...", tableName);
+				var removed = PurgeTable(cancellationToken, table, resource);
 
-				var removedCount = _storage.UseConnection(
-					connection => RemoveExpiredRows(connection, tablePrefix, tableName));
-
-				if (removedCount > 0)
+				if (removed > 0)
 				{
 					// if something was removed we will need to do another batch
 					retry = true;
 					Logger.TraceFormat(
 						"Removed {0} outdated record(s) from '{1}' table.",
-						removedCount, tableName);
+						removed, table);
 				}
 
-				cancellationToken.WaitHandle.WaitOne(DelayBetweenPasses);
+				cancellationToken.WaitHandle.WaitOne(passInterval);
 				cancellationToken.ThrowIfCancellationRequested();
-				
+
 				// next item in batch
 				index = (index + 1) % ProcessedTables.Length;
 			}
 
-			cancellationToken.WaitHandle.WaitOne(_options.JobExpirationCheckInterval);
+			cancellationToken.WaitHandle.WaitOne(batchInterval);
 		}
 
-		private static int RemoveExpiredRows(
-			MySqlConnection connection, string tablePrefix, string tableName)
+		private int PurgeTable(
+			CancellationToken token, string table, LockableResource resource)
 		{
-			var removedCount = connection.Execute(
-				$"delete from `{tablePrefix}{tableName}` where ExpireAt < @now limit @count",
-				new { now = DateTime.UtcNow, count = NumberOfRecordsInSinglePass });
-			Logger.DebugFormat("removed records count={0}", removedCount);
-			return removedCount;
+			var prefix = _options.TablesPrefix;
+			using (var connection = _storage.CreateAndOpenConnection())
+			using (AcquireGlobalLock(token, connection, prefix))
+			{
+				const int count = PassSize;
+
+				return Repeater
+					.Create(connection, prefix)
+					.Lock(LockableResource.Counter)
+					.Wait(token)
+					.Log(Logger, $"{GetType().GetFriendlyName()}.PurgeTable({prefix}{table})")
+					.Execute(PurgeQuery(prefix, table), new { count });
+			}
 		}
 
-		public override string ToString() { return GetType().ToString(); }
+		private static string PurgeQuery(string prefix, string table) =>
+			$"delete from `{prefix}{table}` where ExpireAt < utc_timestamp() limit @count";
+
+		private static IDisposable AcquireGlobalLock(
+			CancellationToken token, MySqlConnection connection, string prefix) =>
+			_ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+
+		public override string ToString() => GetType().GetFriendlyName();
 	}
 }

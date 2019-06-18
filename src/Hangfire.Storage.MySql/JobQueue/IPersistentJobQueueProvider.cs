@@ -1,6 +1,6 @@
 ﻿namespace Hangfire.Storage.MySql.JobQueue
 {
-    public interface IPersistentJobQueueProvider
+    internal interface IPersistentJobQueueProvider
     {
         IPersistentJobQueue GetJobQueue();
         IPersistentJobQueueMonitoringApi GetJobQueueMonitoringApi();

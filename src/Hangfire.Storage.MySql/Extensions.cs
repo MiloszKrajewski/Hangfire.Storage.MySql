@@ -12,7 +12,7 @@ namespace System
 	{
 		public static string Join(this IEnumerable<string> collection, string separator) =>
 			string.Join(separator, collection);
-		
+
 		public static string NotBlank(this string value, string instead = null) =>
 			string.IsNullOrWhiteSpace(value) ? instead : value;
 
@@ -112,5 +112,11 @@ namespace System
 				subject.GetType().GetFriendlyName(),
 				RuntimeHelpers.GetHashCode(subject));
 		}
+		
+		public static Func<object> ToFunc(this Action action) =>
+			() => { action(); return null; };
+
+		public static Func<T, object> ToFunc<T>(this Action<T> action) =>
+			x => { action(x); return null; };
 	}
 }
