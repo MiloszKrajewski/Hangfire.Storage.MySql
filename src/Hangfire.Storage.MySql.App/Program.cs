@@ -39,7 +39,7 @@ namespace Hangfire.Storage.MySql.App
 				.Subscribe(c => Console.WriteLine($"{c / 5.0:N}/s"));
 
 			var connectionString = "Server=localhost;Database=hangfire;Uid=test;Pwd=test";
-			var tablePrefix = "lib1_";
+			var tablePrefix = "with_locks_";
 
 			GlobalConfiguration.Configuration.UseLogProvider(new HLogProvider(loggerFactory));
 
@@ -49,7 +49,7 @@ namespace Hangfire.Storage.MySql.App
 				var cancel = new CancellationTokenSource();
 				var task = Task.WhenAll(
 					Task.Run(() => Producer(loggerFactory, storage, cancel.Token), cancel.Token),
-					//Task.Run(() => Consumer(loggerFactory, storage, cancel.Token), cancel.Token),
+					Task.Run(() => Consumer(loggerFactory, storage, cancel.Token), cancel.Token),
 					Task.CompletedTask
 				);
 
@@ -84,9 +84,9 @@ namespace Hangfire.Storage.MySql.App
 			}
 
 			return Task.WhenAll(
-//				Task.Run(Create, token),
-//				Task.Run(Create, token),
-//				Task.Run(Create, token),
+				Task.Run(Create, token),
+				Task.Run(Create, token),
+				Task.Run(Create, token),
 				Task.Run(Create, token));
 		}
 
