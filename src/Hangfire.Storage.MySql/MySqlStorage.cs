@@ -163,7 +163,7 @@ namespace Hangfire.Storage.MySql
         {
             var connection = new MySqlConnection(_connectionString);
             connection.Open();
-            _ResourceLock.ReleaseAll(connection, null);
+            ResourceLock.ReleaseAll(connection, null);
             return connection;
         }
 

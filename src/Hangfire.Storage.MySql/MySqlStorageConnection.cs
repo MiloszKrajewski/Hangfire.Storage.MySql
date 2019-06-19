@@ -36,7 +36,7 @@ namespace Hangfire.Storage.MySql
 			try
 			{
 				return DisposableBag.Create(
-					_ResourceLock.AcquireAny(connection, _prefix, timeout, resource),
+					ResourceLock.AcquireAny(connection, _prefix, timeout, resource),
 					connection);
 			}
 			catch

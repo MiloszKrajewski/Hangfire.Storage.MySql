@@ -47,7 +47,7 @@ namespace Hangfire.Storage.MySql
 
             var prefix = tablesPrefix ?? string.Empty;
 
-            using (_ResourceLock.AcquireMany(
+            using (ResourceLock.AcquireMany(
                 connection, prefix, MigrationTimeout, LockableResource.Migration))
             {
                 var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Migrations.xml";

@@ -69,7 +69,7 @@ namespace Hangfire.Storage.MySql
 
 		private static IDisposable AcquireGlobalLock(
 			CancellationToken token, DbConnection connection, string prefix) =>
-			_ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+			ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
 
 		private static string AggregationQuery(string prefix) =>
 			$@"/* CountersAggregator.AggregateCounters */

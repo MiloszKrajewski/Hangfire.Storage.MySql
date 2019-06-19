@@ -1,27 +1,24 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using Dapper;
 using System.Linq;
 using System.Threading;
-using Dapper;
-using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql.Locking
 {
-	public partial class _ResourceLock
+	public partial class ResourceLock
 	{
 		public static bool TestMany(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
 			string[] resourceNames)
 		{
-			var locks = resourceNames
-				.Select((n, i) => $"is_used_lock(@name{i}) as lock{i}")
-				.Join(", ");
-			var sql = $"select connection_id() as connectionId, {locks}";
-			var args = new DynamicParameters();
-			foreach(var (n, i) in resourceNames.Select((n, i) => (n, i))) 
-				args.Add($"name{i}", $"{tablePrefix}/{n}");
+			KeyValuePair<string, object> Pair(string n, int i) =>
+				new KeyValuePair<string, object>($"name{i}", $"{tablePrefix}/{n}");
+
+			var sql = BuildTestQuery(resourceNames.Length);
+			var args = new DynamicParameters(resourceNames.Select(Pair));
 			var results = connection.QueryFirst(sql, args, transaction)
 				as IDictionary<string, object>;
 			var connectionId = Convert.ToInt32(results?["connectionId"]);
@@ -32,6 +29,20 @@ namespace Hangfire.Storage.MySql.Locking
 				.Select(v => v is null || v is DBNull ? -1 : Convert.ToInt32(v))
 				.All(v => v == -1 || v == connectionId);
 		}
+		
+		private static readonly ConcurrentDictionary<int, string> TestQueries = 
+			new ConcurrentDictionary<int, string>();
+
+		private static string BuildTestQuery(int resources) =>
+			TestQueries.GetOrAdd(
+				resources, r => {
+					var locks = Enumerable
+						.Range(0, resources)
+						.Select(i => $"is_used_lock(@name{i}) as lock{i}")
+						.Join(", ");
+					var sql = $"select connection_id() as connectionId, {locks}";
+					return sql;
+				});
 
 		public static IDisposable AcquireMany(
 			IDbConnection connection, IDbTransaction transaction, string prefix,
@@ -49,7 +60,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 				foreach (var resourceName in orderedResourceNames)
 				{
-					var handle = new _ResourceLock(
+					var handle = new ResourceLock(
 						connection, transaction,
 						expiration, token,
 						$"{prefix}/{resourceName}");

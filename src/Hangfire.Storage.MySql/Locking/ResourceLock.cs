@@ -7,14 +7,14 @@ using System.Threading;
 
 namespace Hangfire.Storage.MySql.Locking
 {
-	public partial class _ResourceLock: IDisposable
+	public partial class ResourceLock: IDisposable
 	{
 		private readonly IDbConnection _connection;
 		private readonly IDbTransaction _transaction;
 		private readonly string _resource;
 		private bool _disposed;
 
-		private _ResourceLock(
+		private ResourceLock(
 			IDbConnection connection, IDbTransaction transaction,
 			DateTime timeout, CancellationToken token,
 			string resourceName)

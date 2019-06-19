@@ -100,7 +100,7 @@ namespace Hangfire.Storage.MySql
 
 		private static IDisposable AcquireGlobalLock(
 			CancellationToken token, MySqlConnection connection, string prefix) =>
-			_ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+			ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
 
 		public override string ToString() => GetType().GetFriendlyName();
 	}

@@ -18,7 +18,7 @@ namespace Hangfire.Storage.MySql
 		private readonly MySqlStorageOptions _options;
 
 		private readonly HashSet<LockableResource> _resources = new HashSet<LockableResource>();
-		private readonly Queue<Action<IContext>> _commandQueue = new Queue<Action<IContext>>();
+		private readonly Queue<Action<IContext>> _queue = new Queue<Action<IContext>>();
 
 		public MySqlWriteOnlyTransaction(MySqlStorage storage, MySqlStorageOptions options)
 		{
@@ -396,17 +396,9 @@ namespace Hangfire.Storage.MySql
 		{
 			void Action(IContext c)
 			{
-				foreach (var command in _commandQueue)
+				foreach (var command in _queue)
 				{
-					try
-					{
-						command(c);
-					}
-					catch (Exception e)
-					{
-						Logger.Error($"{e.GetType().Name}: {e.Message}\n{e.StackTrace}");
-						throw;
-					}
+					command(c);
 				}
 			}
 
@@ -421,12 +413,13 @@ namespace Hangfire.Storage.MySql
 			}
 		}
 
-		private void QueueCommand(Action<IContext> action) { _commandQueue.Enqueue(action); }
+		private void QueueCommand(Action<IContext> action) => 
+			_queue.Enqueue(action);
 
 		private void QueueCommand(LockableResource resource, Action<IContext> action)
 		{
 			AcquireLock(resource);
-			_commandQueue.Enqueue(action);
+			_queue.Enqueue(action);
 		}
 
 		private void AcquireLock(LockableResource resource) =>

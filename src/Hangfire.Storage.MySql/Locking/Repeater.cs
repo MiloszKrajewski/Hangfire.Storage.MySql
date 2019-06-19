@@ -121,16 +121,25 @@ namespace Hangfire.Storage.MySql.Locking
 			var anyLocks = _resources.Any();
 
 			bool IsFree() =>
-				!anyLocks || _ResourceLock.TestMany(
+				!anyLocks || ResourceLock.TestMany(
 					_connection, null, _prefix, _resources);
 
 			T Loop(int retries) => RetryLoop(batch, retries, action);
 
 			IDisposable Acquire() =>
-				!anyLocks ? null : _ResourceLock.AcquireMany(
+				!anyLocks ? null : ResourceLock.AcquireMany(
 					_connection, null, _prefix,
 					_deadline.Subtract(DateTime.UtcNow), _token,
 					_resources);
+
+			try
+			{
+				return Loop(0);
+			}
+			catch (TimeoutException)
+			{
+				// ignore and retry with locks
+			}
 
 			if (IsFree())
 			{
@@ -183,6 +192,8 @@ namespace Hangfire.Storage.MySql.Locking
 					{
 						var context = Context.Create(this, transaction);
 						var result = action(context);
+						transaction?.Commit();
+
 						if (attempt > 1)
 							_logger?.Info($"Dead-lock {attempt} resolved");
 
