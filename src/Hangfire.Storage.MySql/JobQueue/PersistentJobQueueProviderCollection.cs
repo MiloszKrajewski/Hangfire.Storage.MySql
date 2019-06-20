@@ -20,17 +20,16 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		public PersistentJobQueueProviderCollection(IPersistentJobQueueProvider defaultProvider)
 		{
-			if (defaultProvider == null) throw new ArgumentNullException("defaultProvider");
-
-			_defaultProvider = defaultProvider;
+			_defaultProvider = defaultProvider
+				?? throw new ArgumentNullException(nameof(defaultProvider));
 
 			_providers.Add(_defaultProvider);
 		}
 
 		public void Add(IPersistentJobQueueProvider provider, IEnumerable<string> queues)
 		{
-			if (provider == null) throw new ArgumentNullException("provider");
-			if (queues == null) throw new ArgumentNullException("queues");
+			if (provider == null) throw new ArgumentNullException(nameof(provider));
+			if (queues == null) throw new ArgumentNullException(nameof(queues));
 
 			Logger.TraceFormat("Add providers");
 
@@ -42,18 +41,14 @@ namespace Hangfire.Storage.MySql.JobQueue
 			}
 		}
 
-		public IPersistentJobQueueProvider GetProvider(string queue)
-		{
-			return _providersByQueue.ContainsKey(queue)
+		public IPersistentJobQueueProvider GetProvider(string queue) =>
+			_providersByQueue.ContainsKey(queue)
 				? _providersByQueue[queue]
 				: _defaultProvider;
-		}
 
-		public IEnumerator<IPersistentJobQueueProvider> GetEnumerator()
-		{
-			return _providers.GetEnumerator();
-		}
+		public IEnumerator<IPersistentJobQueueProvider> GetEnumerator() => 
+			_providers.GetEnumerator();
 
-		IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 	}
 }

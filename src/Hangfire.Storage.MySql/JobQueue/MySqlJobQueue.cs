@@ -79,7 +79,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 				var then = now.Subtract(expiration);
 				return ctx.C.Execute(
 					$@"/* MySqlJobQueue.ClaimJob */
-		                update `{ctx.Prefix}JobQueue` 
+		                update `{ctx.P}JobQueue` 
 		                set FetchedAt = @now, FetchToken = @token
 		                where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
 		                limit 1",
@@ -107,7 +107,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 		public void Enqueue(IContext context, string queue, string jobId) =>
 			context.C.Execute(
 				$@"/* MySqlJobQueue.Enqueue */
-                insert into `{context.Prefix}JobQueue` (JobId, Queue)
+                insert into `{context.P}JobQueue` (JobId, Queue)
                 values (@jobId, @queue)",
 				new { jobId, queue },
 				context.T);

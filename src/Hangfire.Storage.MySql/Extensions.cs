@@ -10,6 +10,22 @@ namespace System
 {
 	internal static class Extensions
 	{
+		public static R PipeTo<T, R>(this T subject, Func<T, R> func) => func(subject);
+
+		public static T TapWith<T>(this T subject, Action<T> func)
+		{
+			func(subject);
+			return subject;
+		}
+		
+		public static void ForEach<T>(this IEnumerable<T> collection, Action<T> func)
+		{
+			foreach (var item in collection)
+			{
+				func(item);
+			}
+		}
+
 		public static string Join(this IEnumerable<string> collection, string separator) =>
 			string.Join(separator, collection);
 
@@ -18,6 +34,10 @@ namespace System
 
 		public static IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T> collection) =>
 			collection ?? Array.Empty<T>();
+
+		public static V TryGetOrDefault<K, V>(
+			this IDictionary<K, V> map, K key, V defaultValue = default(V)) =>
+			map.TryGetValue(key, out var value) ? value : defaultValue;
 
 		public static T Rethrow<T>(this T exception)
 			where T: Exception
@@ -112,11 +132,17 @@ namespace System
 				subject.GetType().GetFriendlyName(),
 				RuntimeHelpers.GetHashCode(subject));
 		}
-		
+
 		public static Func<object> ToFunc(this Action action) =>
-			() => { action(); return null; };
+			() => {
+				action();
+				return null;
+			};
 
 		public static Func<T, object> ToFunc<T>(this Action<T> action) =>
-			x => { action(x); return null; };
+			x => {
+				action(x);
+				return null;
+			};
 	}
 }

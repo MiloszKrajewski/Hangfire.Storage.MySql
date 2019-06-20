@@ -35,7 +35,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Job,
 				x => x.C.Execute(
-					$"update `{x.Prefix}Job` set ExpireAt = @expireAt where Id = @id",
+					$"update `{x.P}Job` set ExpireAt = @expireAt where Id = @id",
 					new { id = jobId, expireAt },
 					x.T));
 		}
@@ -47,7 +47,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Job,
 				x => x.C.Execute(
-					$"update `{x.Prefix}Job` set ExpireAt = null where Id = @id",
+					$"update `{x.P}Job` set ExpireAt = null where Id = @id",
 					new { id = jobId },
 					x.T));
 		}
@@ -60,9 +60,9 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				x => x.C.Execute(
 					$@"/* SetJobState */
-					insert into `{x.Prefix}State` (JobId, Name, Reason, CreatedAt, Data)
+					insert into `{x.P}State` (JobId, Name, Reason, CreatedAt, Data)
 						values (@jobId, @name, @reason, @createdAt, @data);
-					update `{x.Prefix}Job` 
+					update `{x.P}Job` 
 						set StateId = last_insert_id(), StateName = @name 
 						where Id = @jobId;",
 					new {
@@ -83,7 +83,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.State,
 				x => x.C.Execute(
 					$@"
-					insert into `{x.Prefix}State` (JobId, Name, Reason, CreatedAt, Data)
+					insert into `{x.P}State` (JobId, Name, Reason, CreatedAt, Data)
 					values (@jobId, @name, @reason, @createdAt, @data)",
 					new {
 						jobId,
@@ -115,7 +115,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Counter,
 				x => x.C.Execute(
 					$@"/* IncrementCounter */
-					insert into `{x.Prefix}Counter` (`Key`, `Value`) values (@key, @value)",
+					insert into `{x.P}Counter` (`Key`, `Value`) values (@key, @value)",
 					new { key, value = 1 },
 					x.T));
 		}
@@ -129,7 +129,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Counter,
 				x => x.C.Execute(
 					$@"/* IncrementCounter */
-					insert into `{x.Prefix}Counter` (`Key`, `Value`, `ExpireAt`) 
+					insert into `{x.P}Counter` (`Key`, `Value`, `ExpireAt`) 
 					values (@key, @value, @expireAt)",
 					new { key, value = 1, expireAt },
 					x.T));
@@ -143,7 +143,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Counter,
 				x => x.C.Execute(
 					$@"/* DecrementCounter */
-					insert into `{x.Prefix}Counter` (`Key`, `Value`) values (@key, @value)",
+					insert into `{x.P}Counter` (`Key`, `Value`) values (@key, @value)",
 					new { key, value = -1 },
 					x.T));
 		}
@@ -158,7 +158,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Counter,
 				x => x.C.Execute(
 					$@"/* DecrementCounter */
-					insert into `{x.Prefix}Counter` (`Key`, `Value`, `ExpireAt`) 
+					insert into `{x.P}Counter` (`Key`, `Value`, `ExpireAt`) 
 					values (@key, @value, @expireAt)",
 					new { key, value = -1, expireAt },
 					x.T));
@@ -175,7 +175,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Set,
 				x => x.C.Execute(
 					$@"/* AddToSet */
-					insert into `{x.Prefix}Set` (`Key`, `Value`, `Score`) 
+					insert into `{x.P}Set` (`Key`, `Value`, `Score`) 
 					values (@key, @value, @score) 
 					on duplicate key update `Score` = @score",
 					new { key, value, score },
@@ -193,7 +193,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Set,
 				x => x.C.Execute(
 					$@"/* AddRangeToSet */
-					insert into `{x.Prefix}Set` (`Key`, Value, Score) 
+					insert into `{x.P}Set` (`Key`, Value, Score) 
 					values (@key, @value, 0.0)",
 					items.Select(value => new { key, value }).ToList(),
 					x.T));
@@ -207,7 +207,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Set,
 				x => x.C.Execute(
 					$@"/* RemoveFromSet */
-					delete from `{x.Prefix}Set` where `Key` = @key and Value = @value",
+					delete from `{x.P}Set` where `Key` = @key and Value = @value",
 					new { key, value },
 					x.T));
 		}
@@ -223,7 +223,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Set,
 				x => x.C.Execute(
-					$@"update `{x.Prefix}Set` set ExpireAt = @expireAt where `Key` = @key",
+					$@"update `{x.P}Set` set ExpireAt = @expireAt where `Key` = @key",
 					new { key, expireAt },
 					x.T));
 		}
@@ -235,7 +235,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.List,
 				x => x.C.Execute(
-					$"insert into `{x.Prefix}List` (`Key`, Value) values (@key, @value)",
+					$"insert into `{x.P}List` (`Key`, Value) values (@key, @value)",
 					new { key, value },
 					x.T));
 		}
@@ -251,7 +251,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.List,
 				x => x.C.Execute(
-					$"update `{x.Prefix}List` set ExpireAt = @expireAt where `Key` = @key",
+					$"update `{x.P}List` set ExpireAt = @expireAt where `Key` = @key",
 					new { key, expireAt },
 					x.T));
 		}
@@ -263,7 +263,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.List,
 				x => x.C.Execute(
-					$"delete from `{x.Prefix}List` where `Key` = @key and Value = @value",
+					$"delete from `{x.P}List` where `Key` = @key and Value = @value",
 					new { key, value },
 					x.T));
 		}
@@ -278,9 +278,9 @@ namespace Hangfire.Storage.MySql
 				x => x.C.Execute(
 					$@"/* TrimList */
 	                delete lst
-	                from `{x.Prefix}List` lst join (
+	                from `{x.P}List` lst join (
 						select tmp.Id, @rownum := @rownum + 1 as `rank`
-						from `{x.Prefix}List` tmp, (select @rownum := 0) r
+						from `{x.P}List` tmp, (select @rownum := 0) r
 					) ranked on ranked.Id = lst.Id
 	                where lst.Key = @key and ranked.`rank` not between @start and @end",
 					new { key, start = keepStartingFrom + 1, end = keepEndingAt + 1 },
@@ -296,7 +296,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Hash,
 				x => x.C.Execute(
-					$"update `{x.Prefix}Hash` set ExpireAt = null where `Key` = @key",
+					$"update `{x.P}Hash` set ExpireAt = null where `Key` = @key",
 					new { key },
 					x.T));
 		}
@@ -310,7 +310,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Set,
 				x => x.C.Execute(
-					$"update `{x.Prefix}Set` set ExpireAt = null where `Key` = @key",
+					$"update `{x.P}Set` set ExpireAt = null where `Key` = @key",
 					new { key },
 					x.T));
 		}
@@ -324,7 +324,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Set,
 				x => x.C.Execute(
-					$"delete from `{x.Prefix}Set` where `Key` = @key",
+					$"delete from `{x.P}Set` where `Key` = @key",
 					new { key },
 					x.T));
 		}
@@ -338,7 +338,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.List,
 				x => x.C.Execute(
-					$"update `{x.Prefix}List` set ExpireAt = null where `Key` = @key",
+					$"update `{x.P}List` set ExpireAt = null where `Key` = @key",
 					new { key },
 					x.T));
 		}
@@ -355,7 +355,7 @@ namespace Hangfire.Storage.MySql
 				LockableResource.Hash,
 				x => x.C.Execute(
 					$@"/* SetRangeInHash */
-					insert into `{x.Prefix}Hash` (`Key`, Field, Value) 
+					insert into `{x.P}Hash` (`Key`, Field, Value) 
 					values (@key, @field, @value) 
 					on duplicate key update Value = @value",
 					keyValuePairs.Select(y => new { key, field = y.Key, value = y.Value }),
@@ -373,7 +373,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Hash,
 				x => x.C.Execute(
-					$@"update `{x.Prefix}Hash` set ExpireAt = @expireAt where `Key` = @key",
+					$@"update `{x.P}Hash` set ExpireAt = @expireAt where `Key` = @key",
 					new { key, expireAt },
 					x.T));
 		}
@@ -387,7 +387,7 @@ namespace Hangfire.Storage.MySql
 			QueueCommand(
 				LockableResource.Hash,
 				x => x.C.Execute(
-					$"delete from `{x.Prefix}Hash` where `Key` = @key",
+					$"delete from `{x.P}Hash` where `Key` = @key",
 					new { key },
 					x.T));
 		}

@@ -51,25 +51,12 @@ namespace Hangfire.Storage.MySql.Locking
 		private ILog _logger;
 		private string[] _resources;
 
-		private Repeater(Repeater other)
-		{
-			_name = other._name;
-			_connection = other._connection;
-			_prefix = other._prefix;
-			_deadline = other._deadline;
-			_token = other._token;
-			_resources = other._resources;
-			_logger = other._logger;
-		}
-
 		private Repeater(IDbConnection connection, string prefix)
 		{
 			_connection = connection;
 			_prefix = prefix;
 			_deadline = DateTime.UtcNow.Add(Quick);
 		}
-
-		public virtual Repeater Clone() => new Repeater(this);
 
 		public static IRepeaterLock Create(IDbConnection connection, string prefix) =>
 			new Repeater(connection, prefix);
@@ -172,7 +159,7 @@ namespace Hangfire.Storage.MySql.Locking
 			Execute(true, action.ToFunc());
 
 		public int Execute(string sql, object arguments = null) =>
-			Execute(x => x.C.Execute(sql.Replace("[prefix]", x.Prefix), arguments, x.T));
+			Execute(x => x.C.Execute(sql.Replace("{prefix}", x.P), arguments, x.T));
 
 		private T RetryLoop<T>(bool batch, int retries, Func<IContext, T> action)
 		{
@@ -195,7 +182,7 @@ namespace Hangfire.Storage.MySql.Locking
 						transaction?.Commit();
 
 						if (attempt > 1)
-							_logger?.Info($"Dead-lock {attempt} resolved");
+							_logger?.Info($"Dead-lock {attempt} in {_name} resolved");
 
 						return result;
 					}
@@ -212,7 +199,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 					var delay = attempt * 5 + random.Next(attempt * 25);
 					if (attempt > 1)
-						_logger?.Warn($"Dead-lock {attempt} encountered, retrying in {delay}ms");
+						_logger?.Warn($"Dead-lock {attempt} in {_name} encountered, retrying in {delay}ms");
 					Thread.Sleep(delay);
 				}
 			}
@@ -220,7 +207,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 		IDbConnection IContext.C => _connection;
 		IDbTransaction IContext.T => null;
-		string IContext.Prefix => _prefix;
+		string IContext.P => _prefix;
 
 		private class Context: IContext
 		{
@@ -237,7 +224,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 			public IDbTransaction T => _transaction;
 
-			public string Prefix => _context.Prefix;
+			public string P => _context.P;
 
 			public static IContext Create(Repeater repeater, IDbTransaction transaction) =>
 				transaction is null ? (IContext) repeater : new Context(repeater, transaction);

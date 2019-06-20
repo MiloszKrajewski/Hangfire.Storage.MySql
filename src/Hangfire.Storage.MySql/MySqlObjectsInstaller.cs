@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Data;
-using System.Data.Common;
 using System.IO;
 using System.Reflection;
 using Dapper;
@@ -13,137 +12,137 @@ using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
 {
-    internal static class MySqlObjectsInstaller
-    {
-        private static readonly TimeSpan MigrationTimeout = TimeSpan.FromMinutes(1);
-        private static readonly ILog Log = LogProvider.GetLogger(typeof(MySqlStorage));
+	internal static class MySqlObjectsInstaller
+	{
+		private static readonly TimeSpan MigrationTimeout = TimeSpan.FromMinutes(1);
+		private static readonly ILog Log = LogProvider.GetLogger(typeof(MySqlStorage));
+		private static readonly string Namespace = typeof(MySqlObjectsInstaller).Namespace;
 
-        public static void Install(MySqlConnection connection, string tablesPrefix = null)
-        {
-            if (connection == null) throw new ArgumentNullException("connection");
+		public static void Install(MySqlConnection connection, string prefix = null)
+		{
+			if (connection is null) throw new ArgumentNullException(nameof(connection));
 
-            var prefix = tablesPrefix ?? string.Empty;
+			prefix = prefix ?? string.Empty;
+			InstallScript(connection, prefix);
+			InstallMigrations(connection, prefix);
+		}
 
-            if (TablesExists(connection, prefix))
-            {
-                Log.Info("DB tables already exist. Exit install");
-                return;
-            }
-            
-            var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Install.sql";
-            var script = GetStringResource(resourceName);
-            var formattedScript = GetFormattedScript(script, prefix);
+		private static void InstallScript(IDbConnection connection, string prefix)
+		{
+			if (TableExists(connection, prefix, "Job"))
+			{
+				Log.Info("DB tables already exist. Exit install.");
+				return;
+			}
 
-            Log.Info("Start installing Hangfire SQL objects...");
+			var resourceName = $"{Namespace}.Install.sql";
+			var script = GetStringResource(resourceName);
+			var formattedScript = GetFormattedScript(script, prefix);
 
-            connection.Execute(formattedScript);
+			Log.Info("Start installing Hangfire SQL objects...");
 
-            Log.Info("Hangfire SQL objects installed.");
-        }
+			connection.Execute(formattedScript);
 
-        public static void Upgrade(MySqlConnection connection, string tablesPrefix = null)
-        {
-            if (connection == null) throw new ArgumentNullException(nameof(connection));
+			Log.Info("Hangfire SQL objects installed.");
+		}
 
-            var prefix = tablesPrefix ?? string.Empty;
+		private static void InstallMigrations(IDbConnection connection, string prefix)
+		{
+			using (ResourceLock.AcquireMany(
+				connection, prefix, MigrationTimeout, LockableResource.Migration))
+			{
+				var resourceName = $"{Namespace}.Migrations.xml";
+				var document = XElement.Parse(GetStringResource(resourceName));
 
-            using (ResourceLock.AcquireMany(
-                connection, prefix, MigrationTimeout, LockableResource.Migration))
-            {
-                var resourceName = $"{typeof(MySqlObjectsInstaller).Namespace}.Migrations.xml";
-                var document = XElement.Parse(GetStringResource(resourceName));
+				EnsureMigrationsTable(connection, prefix);
 
-                EnsureMigrationsTable(connection, prefix);
+				var migrations = document
+					.Elements("migration")
+					.Select(e => new { id = e.Attribute("id")?.Value, script = e.Value })
+					.ToArray();
 
-                var migrations = document
-                    .Elements("migration")
-                    .Select(e => new { id = e.Attribute("id")?.Value, script = e.Value })
-                    .ToArray();
+				foreach (var migration in migrations)
+				{
+					var alreadyApplied = IsMigrationApplied(connection, prefix, migration.id);
+					if (alreadyApplied) continue;
 
-                foreach (var migration in migrations)
-                {
-                    var alreadyApplied = IsMigrationApplied(connection, prefix, migration.id);
-                    if (alreadyApplied) continue;
+					ApplyMigration(connection, migration.script, prefix, migration.id);
+				}
+			}
+		}
 
-                    ApplyMigration(connection, migration.script, prefix, migration.id);
-                }
-            }
-        }
+		private static void EnsureMigrationsTable(IDbConnection connection, string prefix)
+		{
+			var tableExists = TableExists(connection, prefix, "Migration");
+			if (tableExists) return;
 
-        private static void EnsureMigrationsTable(DbConnection connection, string prefix)
-        {
-            var tableExists = connection.ExecuteScalar<string>($"SHOW TABLES LIKE '{prefix}Migration';") != null;
-            if (tableExists) return;
-
-            connection.Execute(
-                $@"/* Create migrations table */
+			connection.Execute(
+				$@"/* Create migrations table */
                 create table {prefix}Migration (
                     Id nvarchar(128) not null, 
                     ExecutedAt datetime(6) not null, 
                     primary key (`Id`)
-                ) engine=InnoDB default character set utf8 collate utf8_general_ci;");
-        }
-        
-        private static bool IsMigrationApplied(IDbConnection connection, string prefix, string id)
-        {
-            return connection.QueryFirst<int>(
-                $"select count(*) from `{prefix}Migration` where Id = @id",
-                new { id }) > 0;
-        }
-        
-        private static void ApplyMigration(
-            DbConnection connection, string script, string prefix, string id)
-        {
-            // NOTE: Some operations cannot be executed in transactions (create table?)
-            // we will need some mechanism to handle that if we need it
-            using (var transaction = connection.BeginTransaction())
-            {
-                connection.Execute(
-                    GetFormattedScript(script, prefix),
-                    null,
-                    transaction);
-                connection.Execute(
-                    $"insert into `{prefix}Migration` (Id, ExecutedAt) values (@id, @now)",
-                    new { id, now = DateTime.UtcNow },
-                    transaction);
-                transaction.Commit();
-            }
-        }
+                ) engine=InnoDB default character set utf8 collate utf8_general_ci;"
+			);
+		}
 
-        private static bool TablesExists(MySqlConnection connection, string tablesPrefix) => 
-            connection.ExecuteScalar<string>($"SHOW TABLES LIKE '{tablesPrefix}Job';") != null;
+		private static bool IsMigrationApplied(IDbConnection connection, string prefix, string id)
+		{
+			return connection.QueryFirst<int>(
+				$"select count(*) from `{prefix}Migration` where Id = @id",
+				new { id }) > 0;
+		}
 
-        private static string GetStringResource(string resourceName)
-        {
-#if NET45
-            var assembly = typeof(MySqlObjectsInstaller).Assembly;
-#else
-            var assembly = typeof(MySqlObjectsInstaller).GetTypeInfo().Assembly;
-#endif
+		private static void ApplyMigration(
+			IDbConnection connection, string script, string prefix, string id)
+		{
+			// NOTE: Some operations cannot be executed in transactions (create table?)
+			// we will need some mechanism to handle that if we need it
+			using (var transaction = connection.BeginTransaction())
+			{
+				connection.Execute(
+					GetFormattedScript(script, prefix),
+					null,
+					transaction);
+				connection.Execute(
+					$"insert into `{prefix}Migration` (Id, ExecutedAt) values (@id, @now)",
+					new { id, now = DateTime.UtcNow },
+					transaction);
+				transaction.Commit();
+			}
+		}
 
-            using (var stream = assembly.GetManifestResourceStream(resourceName))
-            {
-                if (stream == null)
-                {
-                    throw new InvalidOperationException(String.Format(
-                        "Requested resource `{0}` was not found in the assembly `{1}`.",
-                        resourceName,
-                        assembly));
-                }
+		private static bool TableExists(
+			IDbConnection connection, string prefix, string tableName) =>
+			connection.ExecuteScalar<string>($"SHOW TABLES LIKE '{prefix}{tableName}';") != null;
 
-                using (var reader = new StreamReader(stream))
-                {
-                    return reader.ReadToEnd();
-                }
-            }
-        }
+		private static string GetStringResource(string resourceName)
+		{
+			var assembly = typeof(MySqlObjectsInstaller).GetTypeInfo().Assembly;
 
-        private static string GetFormattedScript(string script, string tablesPrefix)
-        {
-            var sb = new StringBuilder(script);
-            sb.Replace("[tablesPrefix]", tablesPrefix);
+			using (var stream = assembly.GetManifestResourceStream(resourceName))
+			{
+				if (stream == null)
+				{
+					throw new InvalidOperationException(
+						String.Format(
+							"Requested resource `{0}` was not found in the assembly `{1}`.",
+							resourceName,
+							assembly));
+				}
 
-            return sb.ToString();
-        }
-    }
+				using (var reader = new StreamReader(stream))
+				{
+					return reader.ReadToEnd();
+				}
+			}
+		}
+
+		private static string GetFormattedScript(string script, string tablesPrefix)
+		{
+			var sb = new StringBuilder(script);
+			sb.Replace("{prefix}", tablesPrefix);
+			return sb.ToString();
+		}
+	}
 }

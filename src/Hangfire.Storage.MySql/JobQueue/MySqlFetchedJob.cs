@@ -54,7 +54,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 			int Action(IContext ctx) =>
 				ctx.C.Execute(
-					$"delete from `{ctx.Prefix}JobQueue` where Id = @id",
+					$"delete from `{ctx.P}JobQueue` where Id = @id",
 					new { id = _id },
 					ctx.T);
 
@@ -74,7 +74,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 			int Action(IContext ctx) =>
 				ctx.C.Execute(
-					$"update `{ctx.Prefix}JobQueue` set FetchedAt = null where Id = @id",
+					$"update `{ctx.P}JobQueue` set FetchedAt = null where Id = @id",
 					new { id = _id },
 					ctx.T);
 

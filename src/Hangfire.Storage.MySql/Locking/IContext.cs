@@ -6,6 +6,6 @@ namespace Hangfire.Storage.MySql.Locking
 	{
 		IDbConnection C { get; }
 		IDbTransaction T { get; }
-		string Prefix { get; }
+		string P { get; }
 	}
 }

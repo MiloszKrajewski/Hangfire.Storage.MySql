@@ -61,7 +61,7 @@ namespace Hangfire.Storage.MySql
 			{
 				var jobId = ctx.C.Query<int>(
 					$@"/* CreateExpiredJob */
-					insert into `{ctx.Prefix}Job` (InvocationData, Arguments, CreatedAt, ExpireAt) 
+					insert into `{ctx.P}Job` (InvocationData, Arguments, CreatedAt, ExpireAt) 
 					values (@invocationData, @arguments, @createdAt, @expireAt);
 					select last_insert_id();",
 					new {
@@ -79,7 +79,7 @@ namespace Hangfire.Storage.MySql
 
 				ctx.C.Execute(
 					$@"/* CreateExpiredJob */
-					insert into `{ctx.Prefix}JobParameter` (JobId, Name, Value) 
+					insert into `{ctx.P}JobParameter` (JobId, Name, Value) 
 					values (@jobId, @name, @value)",
 					parameterArray,
 					ctx.T);
@@ -513,7 +513,7 @@ namespace Hangfire.Storage.MySql
 				{
 					ctx.C.Execute(
 						$@"/* SetRangeInHash */
-                        insert into `{ctx.Prefix}Hash` (`Key`, Field, Value)
+                        insert into `{ctx.P}Hash` (`Key`, Field, Value)
 						value (@key, @field, @value)
 						on duplicate key update Value = @value",
 						new { key, field = kv.Key, value = kv.Value },

@@ -34,9 +34,9 @@ namespace Hangfire.Storage.MySql.App
 			ILoggerFactory loggerFactory, IServiceProvider serviceProvider, string[] args)
 		{
 			Ticks
-				.Buffer(TimeSpan.FromSeconds(5))
+				.Buffer(TimeSpan.FromMinutes(1))
 				.Select(l => l.Count)
-				.Subscribe(c => Console.WriteLine($"{c / 5.0:N}/s"));
+				.Subscribe(c => Console.WriteLine($"{c / 60.0:N}/s"));
 
 			var connectionString = "Server=localhost;Database=hangfire;Uid=test;Pwd=test";
 			var tablePrefix = "lib1_";
@@ -84,10 +84,10 @@ namespace Hangfire.Storage.MySql.App
 			}
 
 			return Task.WhenAll(
-				Task.Run(Create, token),
-				Task.Run(Create, token),
-				Task.Run(Create, token),
-				Task.Run(Create, token));
+				Task.Run(() => Create(), token),
+				Task.Run(() => Create(), token),
+				Task.Run(() => Create(), token),
+				Task.Run(() => Create(), token));
 		}
 
 		private static Task Consumer(

@@ -12,163 +12,104 @@ using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
 {
-    public class MySqlStorage : JobStorage, IDisposable
-    {
-        private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlStorage));
+	public class MySqlStorage: JobStorage, IDisposable
+	{
+		private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlStorage));
 
-        private readonly string _connectionString;
-        private readonly MySqlStorageOptions _options;
+		private readonly string _connectionString;
+		private readonly string _cachedToString;
+		private readonly MySqlStorageOptions _options;
 
-        internal virtual PersistentJobQueueProviderCollection QueueProviders { get; private set; }
+		internal PersistentJobQueueProviderCollection QueueProviders { get; private set; }
 
-        public MySqlStorage(string connectionString, MySqlStorageOptions options)
-        {
-            _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString)); 
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+		public MySqlStorage(string connectionString, MySqlStorageOptions options)
+		{
+			_options = options ?? throw new ArgumentNullException(nameof(options));
+			_connectionString = FixConnectionString(
+				connectionString ?? throw new ArgumentNullException(nameof(connectionString)));
+			_cachedToString = BuildToString();
 
-            _connectionString = ApplyAllowUserVariablesProperty(_connectionString);
+			if (options.PrepareSchemaIfNecessary)
+			{
+				using (var connection = CreateAndOpenConnection())
+				{
+					MySqlObjectsInstaller.Install(connection, options.TablesPrefix);
+				}
+			}
 
-            if (options.PrepareSchemaIfNecessary)
-            {
-                using (var connection = CreateAndOpenConnection())
-                {
-                    MySqlObjectsInstaller.Install(connection, options.TablesPrefix);
-                    MySqlObjectsInstaller.Upgrade(connection, options.TablesPrefix);
-                }
-            }
-            
-            InitializeQueueProviders();
-        }
-        
-        private static string ApplyAllowUserVariablesProperty(string connectionString)
-        {
-            if (connectionString.ToLower().Contains("allow user variables"))
-            {
-                return connectionString;
-            }
+			InitializeQueueProviders();
+		}
 
-            return connectionString + ";Allow User Variables=True;";
-        }
+		private static string FixConnectionString(string connectionString)
+		{
+			string AddPart(string key, string value, string cs) =>
+				cs.ToLower().Contains(key.ToLower()) ? cs : $"{cs};{key}={value}";
 
-        private void InitializeQueueProviders()
-        {
-            QueueProviders =
-                new PersistentJobQueueProviderCollection(
-                    new MySqlJobQueueProvider(this, _options));
-        }
+			return connectionString
+				.PipeTo(x => AddPart("Allow User Variables", "true", x));
+		}
 
-        public override IEnumerable<IServerComponent> GetComponents()
-        {
-            yield return new ExpirationManager(this, _options);
-            yield return new CountersAggregator(this, _options);
-        }
+		private void InitializeQueueProviders()
+		{
+			QueueProviders =
+				new PersistentJobQueueProviderCollection(
+					new MySqlJobQueueProvider(this, _options));
+		}
 
-        public override void WriteOptionsToLog(ILog logger)
-        {
-            logger.Info("Using the following options for SQL Server job storage:");
-            logger.InfoFormat("    Queue poll interval: {0}.", _options.QueuePollInterval);
-        }
+		public override IEnumerable<IServerComponent> GetComponents()
+		{
+			yield return new ExpirationManager(this, _options);
+			yield return new CountersAggregator(this, _options);
+		}
 
-        public override string ToString()
-        {
-            const string canNotParseMessage = "<Connection string can not be parsed>";
+		public override void WriteOptionsToLog(ILog logger)
+		{
+			logger.Info("Using the following options for SQL Server job storage:");
+			logger.InfoFormat("    Queue poll interval: {0}.", _options.QueuePollInterval);
+		}
 
-            try
-            {
-                var parts = _connectionString.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Split(new[] { '=' }, StringSplitOptions.RemoveEmptyEntries))
-                    .Select(x => new { Key = x[0].Trim(), Value = x[1].Trim() })
-                    .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+		public override IMonitoringApi GetMonitoringApi() =>
+			new MySqlMonitoringApi(this, _options);
 
-                var builder = new StringBuilder();
+		public override IStorageConnection GetConnection() =>
+			new MySqlStorageConnection(this, _options);
 
-                foreach (var alias in new[] { "Data Source", "Server", "Address", "Addr", "Network Address" })
-                {
-                    if (parts.ContainsKey(alias))
-                    {
-                        builder.Append(parts[alias]);
-                        break;
-                    }
-                }
+		internal MySqlConnection CreateAndOpenConnection() =>
+			new MySqlConnection(_connectionString).TapWith(c => c.Open());
+		
+		public void Dispose()
+		{
+			// There is no implementation
+		}
 
-                if (builder.Length != 0) builder.Append("@");
+		#region ToString
 
-                foreach (var alias in new[] { "Database", "Initial Catalog" })
-                {
-                    if (parts.ContainsKey(alias))
-                    {
-                        builder.Append(parts[alias]);
-                        break;
-                    }
-                }
+		public override string ToString() => _cachedToString;
 
-                return builder.Length != 0
-                    ? String.Format("Server: {0}", builder)
-                    : canNotParseMessage;
-            }
-            catch (Exception ex)
-            {
-                Logger.ErrorException(ex.Message, ex);
-                return canNotParseMessage;
-            }
-        }
+		private static readonly string[] ServerKeys =
+			{ "Data Source", "Server", "Address", "Addr", "Network Address" };
 
-        public override IMonitoringApi GetMonitoringApi()
-        {
-            return new MySqlMonitoringApi(this, _options);
-        }
+		private static readonly string[] DatabaseKeys =
+			{ "Database", "Initial Catalog" };
 
-        public override IStorageConnection GetConnection()
-        {
-            return new MySqlStorageConnection(this, _options);
-        }
+		private string BuildToString()
+		{
+			var parts = _connectionString
+				.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(x => x.Split(new[] { '=' }, StringSplitOptions.RemoveEmptyEntries))
+				.Select(x => new { Key = x[0].Trim(), Value = x[1].Trim() })
+				.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
 
-//        internal void UseTransaction([InstantHandle] Action<MySqlTransaction> action)
-//        {
-//            UseTransaction(connection => {
-//                action(connection);
-//                return true;
-//            });
-//        }
-//        
-//        internal T UseTransaction<T>(
-//            [InstantHandle] Func<MySqlTransaction, T> func)
-//        {
-//            using (var connection = CreateAndOpenConnection())
-//            using (var transaction = connection.BeginTransaction())
-//            {
-//                var result = func(transaction);
-//                transaction.Commit();
-//                return result;
-//            }
-//        }
+			var serverName = ExtractPart(parts, ServerKeys) ?? "<unknown>";
+			var databaseName = ExtractPart(parts, DatabaseKeys) ?? "<unknown>";
 
-       
-        internal T UseConnection<T>([InstantHandle] Func<MySqlConnection, T> func)
-        {
-            using (var connection = CreateAndOpenConnection())
-                return func(connection);
-        }
+			return $"{GetType().GetFriendlyName()}({databaseName}@{serverName})";
+		}
 
-        internal void UseConnection([InstantHandle] Action<MySqlConnection> action)
-        {
-            UseConnection(connection =>
-            {
-                action(connection);
-                return true;
-            });
-        }
+		private static string ExtractPart(
+			IDictionary<string, string> parts, string[] aliases) =>
+			aliases.Select(k => parts.TryGetOrDefault(k)).FirstOrDefault(v => v != null);
 
-        internal MySqlConnection CreateAndOpenConnection()
-        {
-            var connection = new MySqlConnection(_connectionString);
-            connection.Open();
-            ResourceLock.ReleaseAll(connection, null);
-            return connection;
-        }
-
-        public void Dispose()
-        {
-        }
-    }
+		#endregion
+	}
 }

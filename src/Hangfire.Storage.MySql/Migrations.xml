@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <migrations>
   <migration id="index-pack-1"><![CDATA[
-    create index `IX_AggregatedCounter_ExpireAt` on `[tablesPrefix]AggregatedCounter` (`ExpireAt`);
-    create index `IX_Job_ExpireAt` on `[tablesPrefix]Job` (`ExpireAt`);
-    create index `IX_Set_ExpireAt` on `[tablesPrefix]Set` (`ExpireAt`);
-    create index `IX_List_ExpireAt` on `[tablesPrefix]List` (`ExpireAt`);
-    create index `IX_Hash_ExpireAt` on `[tablesPrefix]Hash` (`ExpireAt`);
-    create index `IX_Set_KeyScore` on `[tablesPrefix]Set` (`Key`, `Score`, `Value`);
-    create index `IX_JobQueue_FetchToken` on `[tablesPrefix]JobQueue` (`FetchToken`);
-    create index `IX_DistributedLock_Resource` on `[tablesPrefix]DistributedLock` (`Resource`, `CreatedAt`);
+    create index `IX_AggregatedCounter_ExpireAt` on `{prefix}AggregatedCounter` (`ExpireAt`);
+    create index `IX_Job_ExpireAt` on `{prefix}Job` (`ExpireAt`);
+    create index `IX_Set_ExpireAt` on `{prefix}Set` (`ExpireAt`);
+    create index `IX_List_ExpireAt` on `{prefix}List` (`ExpireAt`);
+    create index `IX_Hash_ExpireAt` on `{prefix}Hash` (`ExpireAt`);
+    create index `IX_Set_KeyScore` on `{prefix}Set` (`Key`, `Score`, `Value`);
+    create index `IX_JobQueue_FetchToken` on `{prefix}JobQueue` (`FetchToken`);
+    create index `IX_DistributedLock_Resource` on `{prefix}DistributedLock` (`Resource`, `CreatedAt`);
   ]]></migration>
   <migration id="set.score-to-double"><![CDATA[
-    alter table `[tablesPrefix]Set` modify Score double not null;
+    alter table `{prefix}Set` modify Score double not null;
   ]]></migration>
 </migrations>
