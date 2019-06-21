@@ -1,7 +1,6 @@
 using System;
 using System.Data;
 using System.Diagnostics;
-using Dapper;
 using Hangfire.Logging;
 using System.Linq;
 using System.Threading;
@@ -26,15 +25,9 @@ namespace Hangfire.Storage.MySql.Locking
 	{
 		IRepeaterExec Log(ILog logger, string name = null);
 
-		T Execute<T>(Func<IContext, T> action);
-
-		void Execute(Action<IContext> action);
-
-		void ExecuteMany(Action<IContext> action);
+		T ExecuteOne<T>(Func<IContext, T> action);
 
 		T ExecuteMany<T>(Func<IContext, T> action);
-
-		int Execute(string sql, object arguments = null);
 	}
 
 	public class Repeater: IRepeaterLock, IRepeaterCancel, IRepeaterExec, IContext
@@ -87,7 +80,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 		public IRepeaterExec Wait(CancellationToken token) =>
 			Wait(Quick, token);
-		
+
 		public IRepeaterExec Wait() =>
 			Wait(Quick);
 
@@ -105,13 +98,14 @@ namespace Hangfire.Storage.MySql.Locking
 
 		private T Execute<T>(bool batch, Func<IContext, T> action)
 		{
+			var total = 0;
 			var anyLocks = _resources.Any();
 
 			bool IsFree() =>
 				!anyLocks || ResourceLock.TestMany(
 					_connection, null, _prefix, _resources);
 
-			T Loop(int retries) => RetryLoop(batch, retries, action);
+			T Loop(int retries) => RetryLoop(batch, retries, action, ref total);
 
 			IDisposable Acquire() =>
 				!anyLocks ? null : ResourceLock.AcquireMany(
@@ -146,22 +140,13 @@ namespace Hangfire.Storage.MySql.Locking
 			}
 		}
 
-		public T Execute<T>(Func<IContext, T> action) =>
+		public T ExecuteOne<T>(Func<IContext, T> action) =>
 			Execute(false, action);
 
-		public void Execute(Action<IContext> action) =>
-			Execute(false, action.ToFunc());
-		
 		public T ExecuteMany<T>(Func<IContext, T> action) =>
 			Execute(true, action);
 
-		public void ExecuteMany(Action<IContext> action) =>
-			Execute(true, action.ToFunc());
-
-		public int Execute(string sql, object arguments = null) =>
-			Execute(x => x.C.Execute(sql.Replace("{prefix}", x.P), arguments, x.T));
-
-		private T RetryLoop<T>(bool batch, int retries, Func<IContext, T> action)
+		private T RetryLoop<T>(bool batch, int retries, Func<IContext, T> action, ref int total)
 		{
 			bool IsDeadlock(MySqlException e) => e.Number == 1213 || e.Number == 1614;
 
@@ -181,8 +166,8 @@ namespace Hangfire.Storage.MySql.Locking
 						var result = action(context);
 						transaction?.Commit();
 
-						if (attempt > 1)
-							_logger?.Info($"Dead-lock {attempt} in {_name} resolved");
+						if (total >= 1)
+							_logger?.Info($"Dead-lock {total} in {_name} resolved");
 
 						return result;
 					}
@@ -190,17 +175,17 @@ namespace Hangfire.Storage.MySql.Locking
 				catch (MySqlException e) when (IsDeadlock(e))
 				{
 					attempt++;
+					total++;
+
+					if (total >= 1)
+						_logger?.Warn($"Dead-lock {total} in {_name} encountered");
 
 					if (DateTime.UtcNow > _deadline || attempt >= retries)
 						throw new TimeoutException(
 							"Operation failed to finish in predefined time", e);
 
 					_token.ThrowIfCancellationRequested();
-
-					var delay = attempt * 5 + random.Next(attempt * 25);
-					if (attempt > 1)
-						_logger?.Warn($"Dead-lock {attempt} in {_name} encountered, retrying in {delay}ms");
-					Thread.Sleep(delay);
+					Thread.Sleep(random.Next(100));
 				}
 			}
 		}

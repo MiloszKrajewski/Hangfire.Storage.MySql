@@ -1,10 +1,9 @@
 ﻿using System;
-using System.Data.Common;
+using System.Data;
 using System.Threading;
 using Hangfire.Logging;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Locking;
-using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
 {
@@ -63,12 +62,12 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Counter)
 					.Wait(token)
 					.Log(Logger)
-					.Execute(_aggregationQuery, new { count });
+					.ExecuteMany(_aggregationQuery, new { count });
 			}
 		}
 
 		private static IDisposable AcquireGlobalLock(
-			CancellationToken token, DbConnection connection, string prefix) =>
+			CancellationToken token, IDbConnection connection, string prefix) =>
 			ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
 
 		private static string AggregationQuery(string prefix) =>
