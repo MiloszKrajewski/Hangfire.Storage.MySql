@@ -60,7 +60,7 @@ namespace Hangfire.Storage.MySql
 				return Repeater
 					.Create(connection, prefix)
 					.Lock(LockableResource.Counter)
-					.Wait(token)
+					.Wait(Repeater.Long, token)
 					.Log(Logger)
 					.ExecuteMany(_aggregationQuery, new { count });
 			}

@@ -1,10 +1,10 @@
 ﻿using System;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -33,10 +33,14 @@ namespace Hangfire.Storage.MySql.App
 		private static void Execute(
 			ILoggerFactory loggerFactory, IServiceProvider serviceProvider, string[] args)
 		{
-			Ticks
-				.Buffer(TimeSpan.FromMinutes(1))
-				.Select(l => l.Count)
-				.Subscribe(c => Console.WriteLine($"{c / 60.0:N}/s"));
+			var velocity = Ticks
+				.Buffer(TimeSpan.FromSeconds(1))
+				.Select(l => l.Count);
+
+			var average = velocity
+				.Buffer(10, 1)
+				.Select(b => b.Average())
+				.Subscribe(avg => Console.WriteLine($"{avg:N}/s"));
 
 			var connectionString = "Server=localhost;Database=hangfire;Uid=test;Pwd=test";
 			var tablePrefix = "lib1_";

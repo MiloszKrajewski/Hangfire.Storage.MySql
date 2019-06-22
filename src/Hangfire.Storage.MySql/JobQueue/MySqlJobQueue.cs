@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Data;
-using System.Data.Common;
 using Dapper;
 using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
 using System.Linq;
 using System.Threading;
-using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql.JobQueue
@@ -16,13 +15,11 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		private readonly MySqlStorage _storage;
 		private readonly MySqlStorageOptions _options;
-		private readonly string _typeName;
 
 		public MySqlJobQueue(MySqlStorage storage, MySqlStorageOptions options)
 		{
 			_storage = storage ?? throw new ArgumentNullException(nameof(storage));
 			_options = options ?? throw new ArgumentNullException(nameof(options));
-			_typeName = GetType().GetFriendlyName();
 		}
 
 		public IFetchedJob Dequeue(string[] queues, CancellationToken cancellationToken)
@@ -51,7 +48,7 @@ namespace Hangfire.Storage.MySql.JobQueue
 						var fetchedJob = FetchJobByToken(connection, prefix, token);
 						var hijacked = connection;
 						connection = null;
-						return new MySqlFetchedJob(_options, hijacked, fetchedJob);
+						return new MySqlFetchedJob(this, hijacked, fetchedJob);
 					}
 
 					cancellationToken.WaitHandle.WaitOne(_options.QueuePollInterval);
@@ -70,29 +67,24 @@ namespace Hangfire.Storage.MySql.JobQueue
 		}
 
 		private static int ClaimJob(
-			DbConnection connection, string prefix,
+			IDbConnection connection, string prefix,
 			string[] queues, TimeSpan expiration, string token)
 		{
-			int Action(IContext ctx)
-			{
-				var now = DateTime.Now;
-				var then = now.Subtract(expiration);
-				return ctx.C.Execute(
-					$@"/* MySqlJobQueue.ClaimJob */
-		                update `{ctx.P}JobQueue` 
-		                set FetchedAt = @now, FetchToken = @token
-		                where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
-		                limit 1",
-					new { queues, now, then, token },
-					ctx.T);
-			}
+			var now = DateTime.Now;
+			var then = now.Subtract(expiration);
 
 			return Repeater
 				.Create(connection, prefix)
 				.Lock(LockableResource.Queue)
 				.Wait(Repeater.Quick)
 				.Log(Logger)
-				.Execute(Action);
+				.ExecuteOne(
+					$@"/* MySqlJobQueue.ClaimJob */
+	                update `{prefix}JobQueue` 
+					set FetchedAt = @now, FetchToken = @token
+					where (Queue in @queues) and (FetchedAt is null or FetchedAt < @then)
+					limit 1",
+					new { queues, now, then, token });
 		}
 
 		private static FetchedJob FetchJobByToken(
@@ -119,7 +111,35 @@ namespace Hangfire.Storage.MySql.JobQueue
 				.Lock(LockableResource.Queue)
 				.Wait(Repeater.Quick)
 				.Log(Logger)
-				.Execute(ctx => Enqueue(ctx, queue, jobId));
+				.ExecuteOne(ctx => Enqueue(ctx, queue, jobId));
+		}
+
+		public void Remove(IDbConnection connection, int id)
+		{
+			var prefix = _options.TablesPrefix;
+
+			Repeater
+				.Create(connection, prefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Long)
+				.Log(Logger)
+				.ExecuteOne(
+					$"delete from `{prefix}JobQueue` where Id = @id",
+					new { id });
+		}
+
+		public void Requeue(IDbConnection connection, int id)
+		{
+			var prefix = _options.TablesPrefix;
+
+			Repeater
+				.Create(connection, prefix)
+				.Lock(LockableResource.Queue)
+				.Wait(Repeater.Long)
+				.Log(Logger)
+				.ExecuteOne(
+					$"update `{prefix}JobQueue` set FetchedAt = null where Id = @id",
+					new { id });
 		}
 	}
 }

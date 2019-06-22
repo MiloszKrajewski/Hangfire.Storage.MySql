@@ -134,7 +134,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Job)
 					.Wait(Repeater.Quick)
 					.Log(Logger)
-					.Execute(
+					.ExecuteOne(
 						$@"/* MySqlStorageConnection.SetJobParameter */
 	                    insert into `[prefix]JobParameter` (JobId, Name, Value) 
 	                    value (@jobId, @name, @value) 
@@ -235,7 +235,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Server)
 					.Wait(Repeater.Quick)
 					.Log(Logger)
-					.Execute(
+					.ExecuteOne(
 						$@"/* AnnounceServer */
 						insert into `{_prefix}Server` (Id, Data, LastHeartbeat) 
 						value (@id, @data, @heartbeat) 
@@ -259,7 +259,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Server)
 					.Wait(Repeater.Quick)
 					.Log(Logger)
-					.Execute(
+					.ExecuteOne(
 						$"delete from `{_prefix}Server` where Id = @id",
 						new { id = serverId });
 			}
@@ -276,7 +276,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Server)
 					.Wait(Repeater.Quick)
 					.Log(Logger)
-					.Execute(
+					.ExecuteOne(
 						$"update `{_prefix}Server` set LastHeartbeat = @now where Id = @id",
 						new { now = DateTime.UtcNow, id = serverId });
 			}
@@ -295,7 +295,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Server)
 					.Wait(Repeater.Quick)
 					.Log(Logger)
-					.Execute(
+					.ExecuteOne(
 						$"delete from `{_prefix}Server` where LastHeartbeat < @timeoutAt",
 						new { timeoutAt = DateTime.UtcNow.Add(timeout.Negate()) });
 			}

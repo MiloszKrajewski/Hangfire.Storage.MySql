@@ -34,6 +34,7 @@ namespace Hangfire.Storage.MySql.Locking
 	{
 		public static readonly TimeSpan Quick = TimeSpan.FromSeconds(5);
 		public static readonly TimeSpan Long = TimeSpan.FromSeconds(15);
+		private static readonly int DeadlockThreshold = 3;
 
 		private readonly IDbConnection _connection;
 		private readonly string _prefix;
@@ -166,7 +167,7 @@ namespace Hangfire.Storage.MySql.Locking
 						var result = action(context);
 						transaction?.Commit();
 
-						if (total >= 1)
+						if (total >= DeadlockThreshold)
 							_logger?.Info($"Dead-lock {total} in {_name} resolved");
 
 						return result;
@@ -177,7 +178,7 @@ namespace Hangfire.Storage.MySql.Locking
 					attempt++;
 					total++;
 
-					if (total >= 1)
+					if (total >= DeadlockThreshold)
 						_logger?.Warn($"Dead-lock {total} in {_name} encountered");
 
 					if (DateTime.UtcNow > _deadline || attempt >= retries)

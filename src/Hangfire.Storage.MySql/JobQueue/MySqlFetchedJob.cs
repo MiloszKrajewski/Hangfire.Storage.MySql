@@ -1,30 +1,25 @@
 ﻿using System;
-using System.Data.Common;
+using System.Data;
 using System.Globalization;
-using Dapper;
-using Hangfire.Logging;
-using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql.JobQueue
 {
 	internal class MySqlFetchedJob: IFetchedJob
 	{
-		private static readonly ILog Logger = LogProvider.GetLogger(typeof(MySqlFetchedJob));
-
-		private readonly DbConnection _connection;
-		private readonly MySqlStorageOptions _options;
+		private readonly MySqlJobQueue _queue;
+		private readonly IDbConnection _connection;
 		private readonly int _id;
 		private bool _removed;
 		private bool _requeued;
 		private bool _disposed;
 
 		public MySqlFetchedJob(
-			MySqlStorageOptions options,
-			DbConnection connection,
+			MySqlJobQueue queue,
+			IDbConnection connection,
 			FetchedJob fetchedJob)
 		{
+			_queue = queue ?? throw new ArgumentNullException(nameof(queue));
 			_connection = connection ?? throw new ArgumentNullException(nameof(connection));
-			_options = options ?? throw new ArgumentNullException(nameof(options));
 
 			if (fetchedJob == null)
 				throw new ArgumentNullException(nameof(fetchedJob));
@@ -50,41 +45,14 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		public void RemoveFromQueue()
 		{
-			Logger.TraceFormat("RemoveFromQueue JobId={0}", JobId);
-
-			int Action(IContext ctx) =>
-				ctx.C.Execute(
-					$"delete from `{ctx.P}JobQueue` where Id = @id",
-					new { id = _id },
-					ctx.T);
-
-			Repeater
-				.Create(_connection, _options.TablesPrefix)
-				.Lock(LockableResource.Queue)
-				.Wait(Repeater.Long)
-				.Log(Logger)
-				.Execute(Action);
-
+			_queue.Remove(_connection, _id);
 			_removed = true;
 		}
 
 		public void Requeue()
 		{
-			Logger.TraceFormat("Requeue JobId={0}", JobId);
 
-			int Action(IContext ctx) =>
-				ctx.C.Execute(
-					$"update `{ctx.P}JobQueue` set FetchedAt = null where Id = @id",
-					new { id = _id },
-					ctx.T);
-
-			Repeater
-				.Create(_connection, _options.TablesPrefix)
-				.Lock(LockableResource.Queue)
-				.Wait(Repeater.Long)
-				.Log(Logger)
-				.Execute(Action);
-
+			_queue.Requeue(_connection, _id);
 			_requeued = true;
 		}
 

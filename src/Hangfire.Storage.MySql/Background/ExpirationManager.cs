@@ -91,7 +91,7 @@ namespace Hangfire.Storage.MySql
 					.Lock(LockableResource.Counter)
 					.Wait(token)
 					.Log(Logger, $"{GetType().GetFriendlyName()}.PurgeTable({prefix}{table})")
-					.Execute(PurgeQuery(prefix, table), new { count });
+					.ExecuteOne(PurgeQuery(prefix, table), new { count });
 			}
 		}
 
