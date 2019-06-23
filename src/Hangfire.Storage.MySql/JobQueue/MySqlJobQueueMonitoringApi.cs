@@ -29,8 +29,9 @@ namespace Hangfire.Storage.MySql.JobQueue
 				var expired = DateTime.UtcNow >= _cacheUpdated.Add(QueuesCacheTimeout);
 				if (!empty && !expired) return _queuesCache;
 
-				using (var connection = _storage.CreateAndOpenConnection())
+				using (var lease = _storage.BorrowConnection())
 				{
+					var connection = lease.Subject;
 					var prefix = _options.TablesPrefix;
 					_cacheUpdated = DateTime.UtcNow;
 					return _queuesCache = connection
@@ -42,8 +43,9 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		public IEnumerable<int> GetEnqueuedJobIds(string queue, int offset, int length)
 		{
-			using (var connection = _storage.CreateAndOpenConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var prefix = _options.TablesPrefix;
 				return connection.Query<int>(
 					$@"/* GetEnqueuedJobIds */
@@ -62,8 +64,9 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		public EnqueuedAndFetchedCountDto GetEnqueuedAndFetchedCount(string queue)
 		{
-			using (var connection = _storage.CreateAndOpenConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var prefix = _options.TablesPrefix;
 				var result = connection.QueryFirst<int>(
 					$"select count(Id) from `{prefix}JobQueue` where Queue = @queue",

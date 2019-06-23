@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using Hangfire.Logging;
 using System.Linq;
-using System.Text;
-using Hangfire.Annotations;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.JobQueue;
 using Hangfire.Storage.MySql.Locking;
@@ -19,6 +18,8 @@ namespace Hangfire.Storage.MySql
 		private readonly string _connectionString;
 		private readonly string _cachedToString;
 		private readonly MySqlStorageOptions _options;
+		private readonly Pool<MySqlConnection> _pool;
+		private readonly DistributedLocks _locks;
 
 		internal PersistentJobQueueProviderCollection QueueProviders { get; private set; }
 
@@ -31,13 +32,17 @@ namespace Hangfire.Storage.MySql
 
 			if (options.PrepareSchemaIfNecessary)
 			{
-				using (var connection = CreateAndOpenConnection())
+				using (var connection = CreateConnection())
 				{
 					MySqlObjectsInstaller.Install(connection, options.TablesPrefix);
 				}
 			}
 
 			InitializeQueueProviders();
+
+			_pool = new Pool<MySqlConnection>(
+				4, 16, CreateConnection, RecycleConnection);
+			_locks = new DistributedLocks(this, options);
 		}
 
 		private static string FixConnectionString(string connectionString)
@@ -74,12 +79,29 @@ namespace Hangfire.Storage.MySql
 		public override IStorageConnection GetConnection() =>
 			new MySqlStorageConnection(this, _options);
 
-		internal MySqlConnection CreateAndOpenConnection() =>
-			new MySqlConnection(_connectionString).TapWith(c => c.Open());
-		
+		private MySqlConnection CreateConnection()
+		{
+			var connection = new MySqlConnection(_connectionString);
+			connection.Open();
+			return connection;
+		}
+
+		internal ILease<MySqlConnection> BorrowConnection() =>
+			_pool.Borrow();
+
+		private static bool RecycleConnection(IDbConnection c)
+		{
+			ConnectionLock.ReleaseAll(c, null);
+			return true;
+		}
+
+		internal IDisposable AcquireLock(string resource, TimeSpan timeout) =>
+			_locks.Acquire(resource, timeout);
+
 		public void Dispose()
 		{
-			// There is no implementation
+			_locks.TryDispose();
+			_pool.TryDispose();
 		}
 
 		#region ToString

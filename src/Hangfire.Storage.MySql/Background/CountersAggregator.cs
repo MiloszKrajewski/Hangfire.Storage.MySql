@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Hangfire.Logging;
 using Hangfire.Server;
@@ -34,25 +35,27 @@ namespace Hangfire.Storage.MySql
 
 			Logger.DebugFormat($"Aggregating records in '{prefix}Counter' table...");
 
-			while (true)
-			{
-				var removedCount = AggregateCounter(cancellationToken);
+				while (true)
+				{
+					using (var lease = _storage.BorrowConnection())
+					{
+						var connection = lease.Subject;
+						var removedCount = AggregateCounter(cancellationToken, connection);
+						if (removedCount < PassSize)
+							break;
+					}
 
-				if (removedCount < PassSize)
-					break;
-
-				cancellationToken.WaitHandle.WaitOne(PassInterval);
-				cancellationToken.ThrowIfCancellationRequested();
-			}
+					cancellationToken.WaitHandle.WaitOne(PassInterval);
+					cancellationToken.ThrowIfCancellationRequested();
+				}
 
 			cancellationToken.WaitHandle.WaitOne(_options.CountersAggregateInterval);
 		}
 
-		private int AggregateCounter(CancellationToken token)
+		private int AggregateCounter(CancellationToken token, IDbConnection connection)
 		{
 			var prefix = _options.TablesPrefix;
 
-			using (var connection = _storage.CreateAndOpenConnection())
 			using (AcquireGlobalLock(token, connection, prefix))
 			{
 				const int count = PassSize;
@@ -68,7 +71,7 @@ namespace Hangfire.Storage.MySql
 
 		private static IDisposable AcquireGlobalLock(
 			CancellationToken token, IDbConnection connection, string prefix) =>
-			ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+			ConnectionLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
 
 		private static string AggregationQuery(string prefix) =>
 			$@"/* CountersAggregator.AggregateCounters */

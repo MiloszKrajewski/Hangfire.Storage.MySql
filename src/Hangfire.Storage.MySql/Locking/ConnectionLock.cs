@@ -7,14 +7,14 @@ using System.Threading;
 
 namespace Hangfire.Storage.MySql.Locking
 {
-	public partial class ResourceLock: IDisposable
+	public partial class ConnectionLock: IDisposable
 	{
 		private readonly IDbConnection _connection;
 		private readonly IDbTransaction _transaction;
 		private readonly string _resource;
 		private bool _disposed;
 
-		private ResourceLock(
+		private ConnectionLock(
 			IDbConnection connection, IDbTransaction transaction,
 			DateTime timeout, CancellationToken token,
 			string resourceName)
@@ -62,7 +62,7 @@ namespace Hangfire.Storage.MySql.Locking
 			Release();
 		}
 
-		public static void ReleaseAll(DbConnection connection, DbTransaction transaction) =>
+		public static void ReleaseAll(IDbConnection connection, DbTransaction transaction) =>
 			connection.Execute("do release_all_locks()", null, transaction);
 
 		private static void ReleaseOne(

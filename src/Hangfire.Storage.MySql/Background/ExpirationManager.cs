@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Data;
 using System.Threading;
 using Hangfire.Logging;
 using Hangfire.Server;
@@ -42,65 +43,69 @@ namespace Hangfire.Storage.MySql
 			var retry = true;
 			var index = 0;
 
-			while (true)
-			{
-				// starting new batch
-				if (index == 0)
+				while (true)
 				{
-					// if previous one did not delete anything we do not need to retry
-					if (!retry) break;
+					// starting new batch
+					if (index == 0)
+					{
+						// if previous one did not delete anything we do not need to retry
+						if (!retry) break;
 
-					// start new batch, assume it will be last run
-					retry = false;
+						// start new batch, assume it will be last run
+						retry = false;
+					}
+
+					var (table, resource) = ProcessedTables[index];
+
+					using (var lease = _storage.BorrowConnection())
+					{
+						var connection = lease.Subject;
+						var removed = PurgeTable(cancellationToken, connection, table, resource);
+
+						if (removed > 0)
+						{
+							// if something was removed we will need to do another batch
+							retry = true;
+							Logger.TraceFormat(
+								"Removed {0} outdated record(s) from '{1}' table.",
+								removed, table);
+						}
+					}
+
+					cancellationToken.WaitHandle.WaitOne(passInterval);
+					cancellationToken.ThrowIfCancellationRequested();
+
+					// next item in batch
+					index = (index + 1) % ProcessedTables.Length;
 				}
-
-				var (table, resource) = ProcessedTables[index];
-
-				var removed = PurgeTable(cancellationToken, table, resource);
-
-				if (removed > 0)
-				{
-					// if something was removed we will need to do another batch
-					retry = true;
-					Logger.TraceFormat(
-						"Removed {0} outdated record(s) from '{1}' table.",
-						removed, table);
-				}
-
-				cancellationToken.WaitHandle.WaitOne(passInterval);
-				cancellationToken.ThrowIfCancellationRequested();
-
-				// next item in batch
-				index = (index + 1) % ProcessedTables.Length;
-			}
 
 			cancellationToken.WaitHandle.WaitOne(batchInterval);
 		}
 
 		private int PurgeTable(
-			CancellationToken token, string table, LockableResource resource)
+			CancellationToken token, IDbConnection connection, string table, LockableResource resource)
 		{
 			var prefix = _options.TablesPrefix;
-			using (var connection = _storage.CreateAndOpenConnection())
 			using (AcquireGlobalLock(token, connection, prefix))
 			{
 				const int count = PassSize;
+				var now = DateTime.UtcNow;
 
 				return Repeater
 					.Create(connection, prefix)
 					.Lock(LockableResource.Counter)
 					.Wait(token)
 					.Log(Logger, $"{GetType().GetFriendlyName()}.PurgeTable({prefix}{table})")
-					.ExecuteOne(PurgeQuery(prefix, table), new { count });
+					.ExecuteOne(PurgeQuery(prefix, table), new { now, count });
 			}
 		}
 
 		private static string PurgeQuery(string prefix, string table) =>
-			$"delete from `{prefix}{table}` where ExpireAt < utc_timestamp() limit @count";
+			$"delete from `{prefix}{table}` where ExpireAt < @now limit @count";
 
 		private static IDisposable AcquireGlobalLock(
-			CancellationToken token, MySqlConnection connection, string prefix) =>
-			ResourceLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
+			CancellationToken token, IDbConnection connection, string prefix) =>
+			ConnectionLock.AcquireAny(connection, prefix, LockTimeout, token, LockName);
 
 		public override string ToString() => GetType().GetFriendlyName();
 	}

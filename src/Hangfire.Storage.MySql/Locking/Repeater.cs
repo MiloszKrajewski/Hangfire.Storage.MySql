@@ -103,13 +103,13 @@ namespace Hangfire.Storage.MySql.Locking
 			var anyLocks = _resources.Any();
 
 			bool IsFree() =>
-				!anyLocks || ResourceLock.TestMany(
+				!anyLocks || ConnectionLock.TestMany(
 					_connection, null, _prefix, _resources);
 
 			T Loop(int retries) => RetryLoop(batch, retries, action, ref total);
 
 			IDisposable Acquire() =>
-				!anyLocks ? null : ResourceLock.AcquireMany(
+				!anyLocks ? null : ConnectionLock.AcquireMany(
 					_connection, null, _prefix,
 					_deadline.Subtract(DateTime.UtcNow), _token,
 					_resources);

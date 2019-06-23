@@ -2,13 +2,12 @@ using System;
 using System.Collections.Generic;
 using Dapper;
 using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
 using System.Linq;
 using System.Threading;
 using Hangfire.Common;
 using Hangfire.Server;
 using Hangfire.Storage.MySql.Entities;
-using Hangfire.Storage.MySql.Locking;
-using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql
 {
@@ -30,21 +29,8 @@ namespace Hangfire.Storage.MySql
 		public override IWriteOnlyTransaction CreateWriteTransaction() =>
 			new MySqlWriteOnlyTransaction(_storage, _options);
 
-		public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout)
-		{
-			var connection = NewConnection();
-			try
-			{
-				return DisposableBag.Create(
-					ResourceLock.AcquireAny(connection, _prefix, timeout, resource),
-					connection);
-			}
-			catch
-			{
-				connection.Dispose();
-				throw;
-			}
-		}
+		public override IDisposable AcquireDistributedLock(string resource, TimeSpan timeout) =>
+			_storage.AcquireLock(resource, timeout);
 
 		public override string CreateExpiredJob(
 			Job job, IDictionary<string, string> parameters, DateTime createdAt, TimeSpan expireIn)
@@ -87,8 +73,9 @@ namespace Hangfire.Storage.MySql
 				return jobId;
 			}
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return Repeater
 					.Create(connection, _prefix)
 					.Lock(LockableResource.Job)
@@ -127,8 +114,9 @@ namespace Hangfire.Storage.MySql
 			if (id == null) throw new ArgumentNullException(nameof(id));
 			if (name == null) throw new ArgumentNullException(nameof(name));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				Repeater
 					.Create(connection, _prefix)
 					.Lock(LockableResource.Job)
@@ -148,8 +136,9 @@ namespace Hangfire.Storage.MySql
 			if (id == null) throw new ArgumentNullException(nameof(id));
 			if (name == null) throw new ArgumentNullException(nameof(name));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 						$@"/* GetJobParameter */
 						select Value from `{_prefix}JobParameter` 
@@ -164,8 +153,9 @@ namespace Hangfire.Storage.MySql
 			if (jobId is null)
 				throw new ArgumentNullException(nameof(jobId));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var job = connection.Query<SqlJob>(
 						$@"/* GetJobData */
 						select InvocationData, StateName, Arguments, CreatedAt 
@@ -197,8 +187,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (jobId is null) throw new ArgumentNullException(nameof(jobId));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var state = connection.Query<SqlState>(
 						$@"/* GetStateData */
 						select s.Name, s.Reason, s.Data 
@@ -222,8 +213,9 @@ namespace Hangfire.Storage.MySql
 			if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 			if (context == null) throw new ArgumentNullException(nameof(context));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var serverData = new ServerData {
 					WorkerCount = context.WorkerCount,
 					Queues = context.Queues,
@@ -252,8 +244,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				Repeater
 					.Create(connection, _options.TablesPrefix)
 					.Lock(LockableResource.Server)
@@ -269,8 +262,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (serverId == null) throw new ArgumentNullException(nameof(serverId));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				Repeater
 					.Create(connection, _prefix)
 					.Lock(LockableResource.Server)
@@ -288,8 +282,9 @@ namespace Hangfire.Storage.MySql
 				throw new ArgumentException(
 					"The `timeout` value must be positive.", nameof(timeout));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return Repeater
 					.Create(connection, _prefix)
 					.Lock(LockableResource.Server)
@@ -305,8 +300,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.QueryFirst<int>(
 					$"select count(`Key`) from `{_prefix}Set` where `Key` = @key",
 					new { key });
@@ -317,8 +313,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 					$@"/* GetRangeFromSet */
 					select `Value` 
@@ -338,8 +335,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var result = connection.Query<string>(
 					$"select Value from `{_prefix}Set` where `Key` = @key",
 					new { key });
@@ -356,8 +354,9 @@ namespace Hangfire.Storage.MySql
 				throw new ArgumentException(
 					"The `toScore` value must be higher or equal to the `fromScore` value.");
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 						$@"select Value from `{_prefix}Set` 
 						where `Key` = @key and Score between @from and @to 
@@ -371,8 +370,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<long?>(
 					$@"/* GetCounter */
 					select sum(s.`Value`) 
@@ -389,8 +389,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<long>(
 					$"select count(Id) from `{_prefix}Hash` where `Key` = @key",
 					new { key }).Single();
@@ -401,8 +402,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var result = connection.Query<DateTime?>(
 					$"select min(ExpireAt) from `{_prefix}Hash` where `Key` = @key",
 					new { key }).Single();
@@ -414,8 +416,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<long>(
 					$"select count(Id) from `{_prefix}List` where `Key` = @key",
 					new { key }).Single();
@@ -426,8 +429,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var result = connection.Query<DateTime?>(
 					$"select min(ExpireAt) from `{_prefix}List` where `Key` = @key",
 					new { key }).Single();
@@ -440,8 +444,9 @@ namespace Hangfire.Storage.MySql
 			if (key == null) throw new ArgumentNullException(nameof(key));
 			if (name == null) throw new ArgumentNullException(nameof(name));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 					$@"/* GetValueFromHash */
 					select `Value` from `{_prefix}Hash` 
@@ -454,8 +459,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 					$@"
 					select `Value` 
@@ -475,8 +481,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				return connection.Query<string>(
 					$@"/* GetAllItemsFromList */
 					select `Value` from `{_prefix}List`
@@ -490,8 +497,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var result = connection.Query<DateTime?>(
 					$"select min(ExpireAt) from `{_prefix}Set` where `Key` = @key",
 					new { key }).Single();
@@ -521,8 +529,9 @@ namespace Hangfire.Storage.MySql
 				}
 			}
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				Repeater
 					.Create(connection, _options.TablesPrefix)
 					.Lock(LockableResource.Hash)
@@ -536,8 +545,9 @@ namespace Hangfire.Storage.MySql
 		{
 			if (key == null) throw new ArgumentNullException(nameof(key));
 
-			using (var connection = NewConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				var result = connection.Query<SqlHash>(
 					$"select Field, Value from `{_prefix}Hash` where `Key` = @key",
 					new { key }
@@ -546,8 +556,6 @@ namespace Hangfire.Storage.MySql
 				return result.Count != 0 ? result : null;
 			}
 		}
-		
-		private MySqlConnection NewConnection() => _storage.CreateAndOpenConnection();
 
 		private static TimeSpan GetTtl(DateTime? expiration) =>
 			!expiration.HasValue

@@ -402,8 +402,9 @@ namespace Hangfire.Storage.MySql
 				}
 			}
 
-			using (var connection = _storage.CreateAndOpenConnection())
+			using (var lease = _storage.BorrowConnection())
 			{
+				var connection = lease.Subject;
 				Repeater
 					.Create(connection, _options.TablesPrefix)
 					.Lock(_resources.ToArray())
@@ -413,7 +414,7 @@ namespace Hangfire.Storage.MySql
 			}
 		}
 
-		private void QueueCommand(Action<IContext> action) => 
+		private void QueueCommand(Action<IContext> action) =>
 			_queue.Enqueue(action);
 
 		private void QueueCommand(LockableResource resource, Action<IContext> action)
@@ -430,9 +431,7 @@ namespace Hangfire.Storage.MySql
 			foreach (var r in resources) _resources.Add(r);
 		}
 
-		private static string Serialize(IState state)
-		{
-			return JobHelper.ToJson(state.SerializeData());
-		}
+		private static string Serialize(IState state) =>
+			JobHelper.ToJson(state.SerializeData());
 	}
 }

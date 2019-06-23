@@ -33,7 +33,6 @@ namespace Hangfire.Storage.MySql.JobQueue
 			// the connection variable is mutable, it job is claimed then this connection
 			// is passed to job itself, and variable is set to null so it does not get
 			// disposed here in such case
-			var connection = _storage.CreateAndOpenConnection();
 			var prefix = _options.TablesPrefix;
 			try
 			{
@@ -41,14 +40,16 @@ namespace Hangfire.Storage.MySql.JobQueue
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
-					var updated = ClaimJob(connection, prefix, queues, expiration, token);
-
-					if (updated != 0)
+					using (var lease = _storage.BorrowConnection())
 					{
-						var fetchedJob = FetchJobByToken(connection, prefix, token);
-						var hijacked = connection;
-						connection = null;
-						return new MySqlFetchedJob(this, hijacked, fetchedJob);
+						var connection = lease.Subject;
+						var updated = ClaimJob(connection, prefix, queues, expiration, token);
+
+						if (updated != 0)
+						{
+							var fetchedJob = FetchJobByToken(connection, prefix, token);
+							return new MySqlFetchedJob(this, fetchedJob);
+						}
 					}
 
 					cancellationToken.WaitHandle.WaitOne(_options.QueuePollInterval);
@@ -59,10 +60,6 @@ namespace Hangfire.Storage.MySql.JobQueue
 			{
 				Logger.ErrorException(ex.Message, ex);
 				throw;
-			}
-			finally
-			{
-				connection?.Dispose();
 			}
 		}
 
@@ -93,7 +90,8 @@ namespace Hangfire.Storage.MySql.JobQueue
 				$@"/* MySqlJobQueue.FetchJobByToken */
                 select Id, JobId, Queue
                 from `{prefix}JobQueue`
-                where FetchToken = @token",
+                where FetchToken = @token
+				limit 1",
 				new { token });
 
 		public void Enqueue(IContext context, string queue, string jobId) =>
@@ -114,32 +112,40 @@ namespace Hangfire.Storage.MySql.JobQueue
 				.ExecuteOne(ctx => Enqueue(ctx, queue, jobId));
 		}
 
-		public void Remove(IDbConnection connection, int id)
+		public void Remove(int id)
 		{
-			var prefix = _options.TablesPrefix;
+			using (var lease = _storage.BorrowConnection())
+			{
+				var connection = lease.Subject;
+				var prefix = _options.TablesPrefix;
 
-			Repeater
-				.Create(connection, prefix)
-				.Lock(LockableResource.Queue)
-				.Wait(Repeater.Long)
-				.Log(Logger)
-				.ExecuteOne(
-					$"delete from `{prefix}JobQueue` where Id = @id",
-					new { id });
+				Repeater
+					.Create(connection, prefix)
+					.Lock(LockableResource.Queue)
+					.Wait(Repeater.Long)
+					.Log(Logger)
+					.ExecuteOne(
+						$"delete from `{prefix}JobQueue` where Id = @id",
+						new { id });
+			}
 		}
 
-		public void Requeue(IDbConnection connection, int id)
+		public void Requeue(int id)
 		{
-			var prefix = _options.TablesPrefix;
+			using (var lease = _storage.BorrowConnection())
+			{
+				var connection = lease.Subject;
+				var prefix = _options.TablesPrefix;
 
-			Repeater
-				.Create(connection, prefix)
-				.Lock(LockableResource.Queue)
-				.Wait(Repeater.Long)
-				.Log(Logger)
-				.ExecuteOne(
-					$"update `{prefix}JobQueue` set FetchedAt = null where Id = @id",
-					new { id });
+				Repeater
+					.Create(connection, prefix)
+					.Lock(LockableResource.Queue)
+					.Wait(Repeater.Long)
+					.Log(Logger)
+					.ExecuteOne(
+						$"update `{prefix}JobQueue` set FetchedAt = null where Id = @id",
+						new { id });
+			}
 		}
 	}
 }

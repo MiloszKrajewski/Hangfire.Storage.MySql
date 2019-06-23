@@ -48,7 +48,7 @@ namespace Hangfire.Storage.MySql
 
 		private static void InstallMigrations(IDbConnection connection, string prefix)
 		{
-			using (ResourceLock.AcquireMany(
+			using (ConnectionLock.AcquireMany(
 				connection, prefix, MigrationTimeout, LockableResource.Migration))
 			{
 				var resourceName = $"{Namespace}.Migrations.xml";

@@ -187,7 +187,8 @@ namespace Hangfire.Storage.MySql.Monitoring
 					ProcessingState.StateName,
 					(sqlJob, job, stateData) => new ProcessingJobDto {
 						Job = job,
-						ServerId = stateData.ContainsKey("ServerId") ? stateData["ServerId"]
+						ServerId = stateData.ContainsKey("ServerId")
+							? stateData["ServerId"]
 							: stateData["ServerName"],
 						StartedAt = JobHelper.DeserializeDateTime(stateData["StartedAt"]),
 					}));
@@ -346,8 +347,11 @@ namespace Hangfire.Storage.MySql.Monitoring
 
 		private T UseConnection<T>(Func<MySqlConnection, T> action)
 		{
-			using (var connection = _storage.CreateAndOpenConnection())
+			using (var lease = _storage.BorrowConnection())
+			{
+				var connection = lease.Subject;
 				return action(connection);
+			}
 		}
 
 		private long GetNumberOfJobsByStateName(MySqlConnection connection, string stateName)
@@ -450,7 +454,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 			}
 
 			var keyMaps = dates.ToDictionary(
-				x => String.Format("stats:{0}:{1}", type, x.ToString("yyyy-MM-dd")), x => x);
+				x => String.Format("stats:{0}:{1:yyyy-MM-dd}", type, x), x => x);
 
 			return GetTimelineStats(connection, keyMaps);
 		}
@@ -460,7 +464,10 @@ namespace Hangfire.Storage.MySql.Monitoring
 			IDictionary<string, DateTime> keyMaps)
 		{
 			var valuesMap = connection.Query(
-					$"select `Key`, `Value` as `Count` from `{_storageOptions.TablesPrefix}AggregatedCounter` where `Key` in @keys",
+					$@"/* GetTimelineStats */
+					select `Key`, `Value` as `Count` 
+					from `{_storageOptions.TablesPrefix}AggregatedCounter` 
+					where `Key` in @keys",
 					new { keys = keyMaps.Keys })
 				.ToDictionary(x => (string) x.Key, x => (long) x.Count);
 
@@ -483,7 +490,8 @@ namespace Hangfire.Storage.MySql.Monitoring
 			MySqlConnection connection, int[] ids)
 		{
 			string enqueuedJobsSql =
-				$@"select j.*, s.Reason as StateReason, s.Data as StateData 
+				$@"/* EnqueuedJobs */
+				select j.*, s.Reason as StateReason, s.Data as StateData 
                 from `{_storageOptions.TablesPrefix}Job` j
                 left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
                 where j.Id in @jobIds";

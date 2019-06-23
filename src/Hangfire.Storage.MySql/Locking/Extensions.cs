@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Text;
+using System.Threading.Tasks;
 
 // ReSharper disable once CheckNamespace
 namespace System
@@ -17,7 +18,7 @@ namespace System
 			func(subject);
 			return subject;
 		}
-		
+
 		public static void ForEach<T>(this IEnumerable<T> collection, Action<T> func)
 		{
 			foreach (var item in collection)
@@ -144,5 +145,27 @@ namespace System
 				action(x);
 				return null;
 			};
+
+		public static void Forget(this Task task, Action<Exception> log = null)
+		{
+			task.ContinueWith(
+				t => {
+					var e = t.Exception;
+					if (e != null) log?.Invoke(e);
+				}, TaskContinuationOptions.OnlyOnFaulted);
+		}
+
+		public static bool TryDispose<T>(this T subject)
+		{
+			try
+			{
+				(subject as IDisposable)?.Dispose();
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
 	}
 }

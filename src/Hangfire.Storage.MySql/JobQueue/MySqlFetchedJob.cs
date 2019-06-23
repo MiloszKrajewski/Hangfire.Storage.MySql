@@ -1,13 +1,17 @@
 ﻿using System;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
+using Dapper;
+using Hangfire.Logging;
+using Hangfire.Storage.MySql.Locking;
 
 namespace Hangfire.Storage.MySql.JobQueue
 {
 	internal class MySqlFetchedJob: IFetchedJob
 	{
 		private readonly MySqlJobQueue _queue;
-		private readonly IDbConnection _connection;
+		// private readonly IDbConnection _connection;
 		private readonly int _id;
 		private bool _removed;
 		private bool _requeued;
@@ -15,11 +19,11 @@ namespace Hangfire.Storage.MySql.JobQueue
 
 		public MySqlFetchedJob(
 			MySqlJobQueue queue,
-			IDbConnection connection,
+			// IDbConnection connection,
 			FetchedJob fetchedJob)
 		{
 			_queue = queue ?? throw new ArgumentNullException(nameof(queue));
-			_connection = connection ?? throw new ArgumentNullException(nameof(connection));
+			// _connection = connection ?? throw new ArgumentNullException(nameof(connection));
 
 			if (fetchedJob == null)
 				throw new ArgumentNullException(nameof(fetchedJob));
@@ -40,19 +44,21 @@ namespace Hangfire.Storage.MySql.JobQueue
 				Requeue();
 			}
 
-			_connection?.Dispose();
+			// _connection?.Dispose();
 		}
 
 		public void RemoveFromQueue()
 		{
-			_queue.Remove(_connection, _id);
+			// _queue.Remove(_connection, _id);
+			_queue.Remove(_id);
 			_removed = true;
 		}
 
 		public void Requeue()
 		{
 
-			_queue.Requeue(_connection, _id);
+			// _queue.Requeue(_connection, _id);
+			_queue.Requeue(_id);
 			_requeued = true;
 		}
 

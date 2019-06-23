@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace Hangfire.Storage.MySql.Locking
 {
-	public partial class ResourceLock
+	public partial class ConnectionLock
 	{
 		public static bool TestMany(
 			IDbConnection connection, IDbTransaction transaction, string tablePrefix,
@@ -60,7 +60,7 @@ namespace Hangfire.Storage.MySql.Locking
 
 				foreach (var resourceName in orderedResourceNames)
 				{
-					var handle = new ResourceLock(
+					var handle = new ConnectionLock(
 						connection, transaction,
 						expiration, token,
 						$"{prefix}/{resourceName}");
