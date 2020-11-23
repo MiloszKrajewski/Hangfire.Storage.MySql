@@ -14,8 +14,8 @@ nuget Microsoft.Extensions.DependencyInjection.Abstractions
 nuget Microsoft.Extensions.Logging
 nuget Microsoft.Extensions.Logging.Abstractions
 
-nuget Hangfire
-nuget Hangfire.Core
+nuget Hangfire < 2
+nuget Hangfire.Core < 2
 nuget Dapper 2.0.30
 nuget MySqlConnector 1.0.1
 
