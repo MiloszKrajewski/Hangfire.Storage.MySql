@@ -7,7 +7,7 @@ using Hangfire.Common;
 using Hangfire.Logging;
 using Hangfire.States;
 using Hangfire.Storage.MySql.Locking;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 
 namespace Hangfire.Storage.MySql
 {
