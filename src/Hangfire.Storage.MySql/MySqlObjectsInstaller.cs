@@ -2,16 +2,15 @@
 using System.Data;
 using System.Data.Common;
 using System.IO;
-using System.Linq;
 using System.Reflection;
+using Dapper;
+using Hangfire.Logging;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml.Linq;
-using Dapper;
-using Hangfire.Logging;
 using Hangfire.Storage.MySql.Locking;
-
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 
 namespace Hangfire.Storage.MySql
 {
