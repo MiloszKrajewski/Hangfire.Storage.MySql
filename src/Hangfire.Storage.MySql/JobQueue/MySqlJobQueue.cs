@@ -5,7 +5,7 @@ using Hangfire.Logging;
 using System.Linq;
 using System.Threading;
 using Hangfire.Storage.MySql.Locking;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 
 namespace Hangfire.Storage.MySql.JobQueue
 {

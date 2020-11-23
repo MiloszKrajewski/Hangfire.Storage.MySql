@@ -1,3 +1,7 @@
+## 2.1.0-beta (2020/11/23)
+* upped MySQlConnector to 1.1.0
+* upped Dapper 
+
 ## 2.0.6-beta (2019/06/02)
 * minor changes to job queue (less connections)
 * SQL typo removed

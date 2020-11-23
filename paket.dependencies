@@ -16,8 +16,8 @@ nuget Microsoft.Extensions.Logging.Abstractions
 
 nuget Hangfire
 nuget Hangfire.Core
-nuget Dapper
-nuget MySqlConnector
+nuget Dapper 2.0.30
+nuget MySqlConnector 1.0.1
 
 nuget Moq
 nuget Microsoft.NET.Test.Sdk

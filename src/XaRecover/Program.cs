@@ -5,7 +5,7 @@ using CommandLine;
 using Dapper;
 using System.Linq;
 using System.Text.RegularExpressions;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 
 namespace XaRecover
 {

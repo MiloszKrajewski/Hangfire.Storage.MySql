@@ -8,7 +8,7 @@ using Hangfire.States;
 using Hangfire.Storage.Monitoring;
 using Hangfire.Storage.MySql.Entities;
 using Hangfire.Storage.MySql.JobQueue;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 
 namespace Hangfire.Storage.MySql.Monitoring
 {
