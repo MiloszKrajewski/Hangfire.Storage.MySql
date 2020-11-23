@@ -432,6 +432,6 @@ namespace Hangfire.Storage.MySql
 		}
 
 		private static string Serialize(IState state) =>
-			JobHelper.ToJson(state.SerializeData());
+			SerializationHelper.Serialize(state.SerializeData());
 	}
 }

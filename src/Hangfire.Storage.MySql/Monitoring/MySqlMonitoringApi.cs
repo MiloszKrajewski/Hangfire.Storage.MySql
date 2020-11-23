@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using Dapper;
 using System.Linq;
 using Hangfire.Annotations;
@@ -8,7 +9,6 @@ using Hangfire.States;
 using Hangfire.Storage.Monitoring;
 using Hangfire.Storage.MySql.Entities;
 using Hangfire.Storage.MySql.JobQueue;
-using MySql.Data.MySqlClient;
 
 namespace Hangfire.Storage.MySql.Monitoring
 {
@@ -57,11 +57,11 @@ namespace Hangfire.Storage.MySql.Monitoring
 
 		public IList<ServerDto> Servers()
 		{
+			var prefix = _storageOptions.TablesPrefix;
 			return UseConnection<IList<ServerDto>>(
 				connection => {
-					var servers =
-						connection.Query<Entities.Server>(
-							$"select * from `{_storageOptions.TablesPrefix}Server`").ToList();
+					var servers = connection.Query<Entities.Server>(
+						$"select * from `{prefix}Server`").ToList();
 
 					var result = new List<ServerDto>();
 
@@ -163,14 +163,14 @@ namespace Hangfire.Storage.MySql.Monitoring
 			return statistics;
 		}
 
-		public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int @from, int perPage)
+		public JobList<EnqueuedJobDto> EnqueuedJobs(string queue, int from, int perPage)
 		{
 			var queueApi = GetQueueApi(queue);
 			var enqueuedJobIds = queueApi.GetEnqueuedJobIds(queue, from, perPage).ToArray();
 			return UseConnection(c => EnqueuedJobs(c, enqueuedJobIds));
 		}
 
-		public JobList<FetchedJobDto> FetchedJobs(string queue, int @from, int perPage)
+		public JobList<FetchedJobDto> FetchedJobs(string queue, int from, int perPage)
 		{
 			var queueApi = GetQueueApi(queue);
 			var fetchedJobIds = queueApi.GetFetchedJobIds(queue, from, perPage).ToArray();
@@ -178,7 +178,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 			return UseConnection(connection => FetchedJobs(connection, fetchedJobIds));
 		}
 
-		public JobList<ProcessingJobDto> ProcessingJobs(int @from, int count)
+		public JobList<ProcessingJobDto> ProcessingJobs(int from, int count)
 		{
 			return UseConnection(
 				connection => GetJobs(
@@ -194,7 +194,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 					}));
 		}
 
-		public JobList<ScheduledJobDto> ScheduledJobs(int @from, int count)
+		public JobList<ScheduledJobDto> ScheduledJobs(int from, int count)
 		{
 			return UseConnection(
 				connection => GetJobs(
@@ -208,7 +208,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 					}));
 		}
 
-		public JobList<SucceededJobDto> SucceededJobs(int @from, int count)
+		public JobList<SucceededJobDto> SucceededJobs(int from, int count)
 		{
 			long? ExtractTotalDuration(IReadOnlyDictionary<string, string> stateData)
 			{
@@ -234,7 +234,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 					}));
 		}
 
-		public JobList<FailedJobDto> FailedJobs(int @from, int count)
+		public JobList<FailedJobDto> FailedJobs(int from, int count)
 		{
 			return UseConnection(
 				connection => GetJobs(
@@ -252,7 +252,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 					}));
 		}
 
-		public JobList<DeletedJobDto> DeletedJobs(int @from, int count)
+		public JobList<DeletedJobDto> DeletedJobs(int from, int count)
 		{
 			return UseConnection(
 				connection => GetJobs(
@@ -345,7 +345,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 					GetHourlyTimelineStats(connection, "failed"));
 		}
 
-		private T UseConnection<T>(Func<MySqlConnection, T> action)
+		private T UseConnection<T>(Func<IDbConnection, T> action)
 		{
 			using (var lease = _storage.BorrowConnection())
 			{
@@ -354,7 +354,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 			}
 		}
 
-		private long GetNumberOfJobsByStateName(MySqlConnection connection, string stateName)
+		private long GetNumberOfJobsByStateName(IDbConnection connection, string stateName)
 		{
 			var sqlQuery = _storageOptions.DashboardJobListLimit.HasValue
 				? $"select count(j.Id) from (select Id from `{_storageOptions.TablesPrefix}Job` where StateName = @state limit @limit) as j"
@@ -377,9 +377,8 @@ namespace Hangfire.Storage.MySql.Monitoring
 		}
 
 		private JobList<TDto> GetJobs<TDto>(
-			MySqlConnection connection,
-			int from,
-			int count,
+			IDbConnection connection,
+			int from, int count,
 			string stateName,
 			Func<SqlJob, Job, Dictionary<string, string>, TDto> selector)
 		{
@@ -394,7 +393,7 @@ namespace Hangfire.Storage.MySql.Monitoring
                 ) as j where j.`rank` between @start and @end ";
 
 			var jobs = connection.Query<SqlJob>(
-					jobsSql, new { stateName, start = @from + 1, end = @from + count })
+					jobsSql, new { stateName, start = from + 1, end = from + count })
 				.ToList();
 
 			return DeserializeJobs(jobs, selector);
@@ -409,7 +408,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 			foreach (var job in jobs)
 			{
 				var deserializedData =
-					JobHelper.FromJson<Dictionary<string, string>>(job.StateData);
+					SerializationHelper.Deserialize<Dictionary<string, string>>(job.StateData);
 				var stateData = deserializedData != null
 					? new Dictionary<string, string>(
 						deserializedData, StringComparer.OrdinalIgnoreCase)
@@ -428,12 +427,12 @@ namespace Hangfire.Storage.MySql.Monitoring
 
 		private static Job DeserializeJob(string invocationData, string arguments)
 		{
-			var data = JobHelper.FromJson<InvocationData>(invocationData);
+			var data = SerializationHelper.Deserialize<InvocationData>(invocationData);
 			data.Arguments = arguments;
 
 			try
 			{
-				return data.Deserialize();
+				return data.DeserializeJob(); // data.Deserialize();
 			}
 			catch (JobLoadException)
 			{
@@ -441,9 +440,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 			}
 		}
 
-		private Dictionary<DateTime, long> GetTimelineStats(
-			MySqlConnection connection,
-			string type)
+		private Dictionary<DateTime, long> GetTimelineStats(IDbConnection connection, string type)
 		{
 			var endDate = DateTime.UtcNow.Date;
 			var dates = new List<DateTime>();
@@ -460,13 +457,13 @@ namespace Hangfire.Storage.MySql.Monitoring
 		}
 
 		private Dictionary<DateTime, long> GetTimelineStats(
-			MySqlConnection connection,
-			IDictionary<string, DateTime> keyMaps)
+			IDbConnection connection, IDictionary<string, DateTime> keyMaps)
 		{
+			var prefix = _storageOptions.TablesPrefix;
 			var valuesMap = connection.Query(
 					$@"/* GetTimelineStats */
 					select `Key`, `Value` as `Count` 
-					from `{_storageOptions.TablesPrefix}AggregatedCounter` 
+					from `{prefix}AggregatedCounter` 
 					where `Key` in @keys",
 					new { keys = keyMaps.Keys })
 				.ToDictionary(x => (string) x.Key, x => (long) x.Count);
@@ -476,6 +473,7 @@ namespace Hangfire.Storage.MySql.Monitoring
 				if (!valuesMap.ContainsKey(key)) valuesMap.Add(key, 0);
 			}
 
+#warning this is weird
 			var result = new Dictionary<DateTime, long>();
 			for (var i = 0; i < keyMaps.Count; i++)
 			{
@@ -486,18 +484,19 @@ namespace Hangfire.Storage.MySql.Monitoring
 			return result;
 		}
 
-		private JobList<EnqueuedJobDto> EnqueuedJobs(
-			MySqlConnection connection, int[] ids)
+		private JobList<EnqueuedJobDto> EnqueuedJobs(IDbConnection connection, int[] ids)
 		{
-			string enqueuedJobsSql =
+			var prefix = _storageOptions.TablesPrefix;
+
+			var query =
 				$@"/* EnqueuedJobs */
 				select j.*, s.Reason as StateReason, s.Data as StateData 
-                from `{_storageOptions.TablesPrefix}Job` j
-                left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
+                from `{prefix}Job` j
+                left join `{prefix}State` s on s.Id = j.StateId
                 where j.Id in @jobIds";
 
 			var jobs = ids.Any()
-				? connection.Query<SqlJob>(enqueuedJobsSql, new { jobIds = ids }).ToArray()
+				? connection.Query<SqlJob>(query, new { jobIds = ids }).ToArray()
 				: Array.Empty<SqlJob>();
 
 			return DeserializeJobs(
@@ -511,13 +510,14 @@ namespace Hangfire.Storage.MySql.Monitoring
 				});
 		}
 
-		private JobList<FetchedJobDto> FetchedJobs(
-			MySqlConnection connection, int[] ids)
+		private JobList<FetchedJobDto> FetchedJobs(IDbConnection connection, int[] ids)
 		{
-			var fetchedJobsSql = $@"/* Jobs with State */
+			var prefix = _storageOptions.TablesPrefix;
+			var query =
+				$@"/* Jobs with State */
                 select j.*, s.Reason as StateReason, s.Data as StateData 
-                from `{_storageOptions.TablesPrefix}Job` j
-                left join `{_storageOptions.TablesPrefix}State` s on s.Id = j.StateId
+                from `{prefix}Job` j
+                left join `{prefix}State` s on s.Id = j.StateId
                 where j.Id in @jobIds";
 
 			KeyValuePair<string, FetchedJobDto> ToPair(SqlJob sqlJob) =>
@@ -529,15 +529,14 @@ namespace Hangfire.Storage.MySql.Monitoring
 					});
 
 			var jobs = ids.Any()
-				? connection.Query<SqlJob>(fetchedJobsSql, new { jobIds = ids }).ToArray()
+				? connection.Query<SqlJob>(query, new { jobIds = ids }).ToArray()
 				: Array.Empty<SqlJob>();
 
 			return new JobList<FetchedJobDto>(jobs.Select(ToPair));
 		}
 
 		private Dictionary<DateTime, long> GetHourlyTimelineStats(
-			MySqlConnection connection,
-			string type)
+			IDbConnection connection, string type)
 		{
 			var endDate = DateTime.UtcNow;
 			var dates = new List<DateTime>();

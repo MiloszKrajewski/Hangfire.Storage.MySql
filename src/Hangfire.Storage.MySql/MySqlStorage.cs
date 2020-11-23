@@ -4,6 +4,7 @@ using System.Data;
 using Hangfire.Logging;
 using System.Linq;
 using Hangfire.Server;
+using Hangfire.Storage.MySql.Install;
 using Hangfire.Storage.MySql.JobQueue;
 using Hangfire.Storage.MySql.Locking;
 using Hangfire.Storage.MySql.Monitoring;

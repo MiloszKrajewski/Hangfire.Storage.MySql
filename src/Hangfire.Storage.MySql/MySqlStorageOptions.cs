@@ -2,58 +2,45 @@ using System;
 
 namespace Hangfire.Storage.MySql
 {
-    public class MySqlStorageOptions
-    {
-        private TimeSpan _queuePollInterval;
-        public static readonly string DefaultTablesPrefix = String.Empty;
+	public class MySqlStorageOptions
+	{
+		public static readonly string DefaultTablesPrefix = string.Empty;
+		public static readonly TimeSpan MinimumPollInterval = TimeSpan.FromSeconds(1);
 
-        public MySqlStorageOptions()
-        {
-            TransactionIsolationLevel = System.Transactions.IsolationLevel.ReadCommitted;
-            QueuePollInterval = TimeSpan.FromSeconds(15);
-            JobExpirationCheckInterval = TimeSpan.FromHours(1);
-            CountersAggregateInterval = TimeSpan.FromMinutes(5);
-            PrepareSchemaIfNecessary = true;
-            DashboardJobListLimit = 50000;
-            TransactionTimeout = TimeSpan.FromMinutes(1);
-            InvisibilityTimeout = TimeSpan.FromMinutes(30);
+		private TimeSpan _queuePollInterval;
 
-            TablesPrefix = DefaultTablesPrefix;
-        }
+		public MySqlStorageOptions()
+		{
+			TransactionIsolationLevel = System.Transactions.IsolationLevel.ReadCommitted;
+			QueuePollInterval = TimeSpan.FromSeconds(15);
+			JobExpirationCheckInterval = TimeSpan.FromHours(1);
+			CountersAggregateInterval = TimeSpan.FromMinutes(5);
+			PrepareSchemaIfNecessary = true;
+			DashboardJobListLimit = 50000;
+			TransactionTimeout = TimeSpan.FromMinutes(1);
+			InvisibilityTimeout = TimeSpan.FromMinutes(30);
 
-        public System.Transactions.IsolationLevel? TransactionIsolationLevel { get; set; }
+			TablesPrefix = DefaultTablesPrefix;
+		}
 
-        public TimeSpan QueuePollInterval
-        {
-            get { return _queuePollInterval; }
-            set
-            {
-                var message = String.Format(
-                    "The QueuePollInterval property value should be positive. Given: {0}.",
-                    value);
+		public System.Transactions.IsolationLevel? TransactionIsolationLevel { get; set; }
 
-                if (value == TimeSpan.Zero)
-                {
-                    throw new ArgumentException(message, "value");
-                }
-                if (value != value.Duration())
-                {
-                    throw new ArgumentException(message, "value");
-                }
+		public TimeSpan QueuePollInterval
+		{
+			get => _queuePollInterval;
+			set => _queuePollInterval = value <= MinimumPollInterval ? MinimumPollInterval : value;
+		}
 
-                _queuePollInterval = value;
-            }
-        }
+		public bool PrepareSchemaIfNecessary { get; set; }
+		public TimeSpan JobExpirationCheckInterval { get; set; }
+		public TimeSpan CountersAggregateInterval { get; set; }
 
-        public bool PrepareSchemaIfNecessary { get; set; }
-        public TimeSpan JobExpirationCheckInterval { get; set; }
-        public TimeSpan CountersAggregateInterval { get; set; }
+		public int? DashboardJobListLimit { get; set; }
+		public TimeSpan TransactionTimeout { get; set; }
 
-        public int? DashboardJobListLimit { get; set; }
-        public TimeSpan TransactionTimeout { get; set; }
-        [Obsolete("Does not make sense anymore. Background jobs re-queued instantly even after ungraceful shutdown now. Will be removed in 2.0.0.")]
-        public TimeSpan InvisibilityTimeout { get; set; }
+		[Obsolete("Will be removed in 2.0.0.")]
+		public TimeSpan InvisibilityTimeout { get; set; }
 
-        public string TablesPrefix { get; set; }
-    }
+		public string TablesPrefix { get; set; }
+	}
 }

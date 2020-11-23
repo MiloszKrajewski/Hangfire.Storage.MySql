@@ -42,7 +42,7 @@ namespace Hangfire.Storage.MySql.App
 				.Select(b => b.Average())
 				.Subscribe(avg => Console.WriteLine($"{avg:N}/s"));
 
-			var connectionString = "Server=localhost;Database=hangfire;Uid=test;Pwd=test;Pooling=false";
+			var connectionString = "Server=localhost;Database=hangfire;Uid=test;Pwd=test";
 			var tablePrefix = "lib1_";
 
 			GlobalConfiguration.Configuration.UseLogProvider(new HLogProvider(loggerFactory));

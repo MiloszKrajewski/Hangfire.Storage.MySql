@@ -1,16 +1,16 @@
 ﻿using System;
 using System.Data;
 using System.IO;
-using System.Reflection;
-using Dapper;
-using Hangfire.Logging;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
+using Dapper;
+using Hangfire.Logging;
 using Hangfire.Storage.MySql.Locking;
 using MySql.Data.MySqlClient;
 
-namespace Hangfire.Storage.MySql
+namespace Hangfire.Storage.MySql.Install
 {
 	internal static class MySqlObjectsInstaller
 	{
@@ -114,7 +114,7 @@ namespace Hangfire.Storage.MySql
 
 		private static bool TableExists(
 			IDbConnection connection, string prefix, string tableName) =>
-			connection.ExecuteScalar<string>($"SHOW TABLES LIKE '{prefix}{tableName}';") != null;
+			connection.ExecuteScalar<string>($"show tables like '{prefix}{tableName}';") != null;
 
 		private static string GetStringResource(string resourceName)
 		{

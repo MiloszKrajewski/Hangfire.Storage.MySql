@@ -124,7 +124,7 @@ namespace Hangfire.Storage.MySql
 					.Log(Logger)
 					.ExecuteOne(
 						$@"/* MySqlStorageConnection.SetJobParameter */
-	                    insert into `[prefix]JobParameter` (JobId, Name, Value) 
+	                    insert into `{_prefix}JobParameter` (JobId, Name, Value) 
 	                    value (@jobId, @name, @value) 
 	                    on duplicate key update Value = @value",
 						new { jobId = id, name, value });
@@ -566,15 +566,15 @@ namespace Hangfire.Storage.MySql
 			FromJson<InvocationData>(job.InvocationData);
 
 		private static string ToJson(object data) =>
-			JobHelper.ToJson(data);
+			SerializationHelper.Serialize(data);
 
 		private static T FromJson<T>(string json) =>
-			JobHelper.FromJson<T>(json);
+			SerializationHelper.Deserialize<T>(json);
 
 		private static InvocationData ToInvocationData(Job job) =>
-			InvocationData.Serialize(job);
+			InvocationData.SerializeJob(job);
 
 		private static Job FromInvocationData(InvocationData invocationData) =>
-			invocationData.Deserialize();
+			invocationData.DeserializeJob();
 	}
 }
