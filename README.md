@@ -7,6 +7,9 @@ This is MySQL storage adapter for [Hangfire](https://www.hangfire.io/).
 It is based on [Hangfire.MySqlStorage](https://github.com/arnoldasgudas/Hangfire.MySqlStorage) 
 and [Hangfire.MySql.Core](https://github.com/stulzq/Hangfire.MySql.Core). 
 
+With all the problems releated to hosting Hangfire on MySQL I decided to implement my own scheduler which I now prefer, 
+check it out here: [Χρόνος](https://github.com/MiloszKrajewski/K4os.Xpovoc)
+
 # Story
 
 It is relatively complicated.
